@@ -1,5 +1,6 @@
 from sklearn import svm
 from sklearn import preprocessing
+import configparser
 
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import GridSearchCV
@@ -10,6 +11,9 @@ import numpy as np
 import time
 
 import matplotlib.pyplot as plt
+
+config = configparser.ConfigParser()
+config.read("config.ini")
 
 def draw_graph(score_active, score_active_diversity, score_random, examples) :
 	mu1 = score_active.mean(axis=0)
@@ -25,8 +29,8 @@ def draw_graph(score_active, score_active_diversity, score_random, examples) :
 	
 	ax.plot(examples, mu1, lw=2, label='Active learning', color='blue')
 	#ax.fill_between(examples, mu1+sigma1, mu1-sigma1, facecolor='blue', alpha=0.5)
-	ax.plot(examples, mu2, lw=2, label='Active learning with diversity', color='green')
-	ax.plot(examples, mu3, lw=2, label='Random learning', color='yellow')
+	ax.plot(examples, mu2, lw=2, label='Active learning with diversity criterion', color='green')
+	ax.plot(examples, mu3, lw=2, label='Random learning without diversity criterion', color='yellow')
 	#ax.fill_between(examples, mu2+sigma2, mu2-sigma2, facecolor='yellow', alpha=0.5)
 	ax.legend(loc='upper left')
 	ax.set_ylabel('Score')
@@ -62,7 +66,6 @@ def train(X, y) :
 	classifier = svm.SVC(kernel='rbf', C=10, gamma=0.01, probability=True,decision_function_shape='ovo')
 	t0 = time.time()
 	classifier.fit(X, y)
-	# print("Model fitted in " + str((time.time() - t0)) + " second(s)")
 
 	return classifier
 
@@ -70,16 +73,22 @@ def random_sample_selection(X_unlabled, nbr, classifier=None) :
 	return np.random.choice(X_unlabled.shape[0], nbr)
 
 def active_sample_selection(X_unlabled, nbr, classifier) :
+	"""
+		Select a number of samples to label based only on uncertainety 
+	"""
 	return uncertainty_filter(X_unlabled, nbr, classifier)
 
 def active_diversity_sample_selection(X_unlabled, nbr, classifier) :
+	"""
+		Select a number of samples to label based on uncertainety and diversity
+	"""
 	
-	uncertain_samples_index = uncertainty_filter(X_unlabled, nbr*2, classifier)	# Take twice as many samples as needed
-	print(uncertain_samples_index)
+	batch_size = config['DIVERSITY'].getint('SelectFrom')	# Number of samples to select with the uncertainty criterion
+
+	uncertain_samples_index = uncertainty_filter(X_unlabled, batch_size, classifier)	# Take twice as many samples as needed
 	uncertain_samples = X_unlabled[uncertain_samples_index]
-	res = diversity_filter(uncertain_samples, uncertain_samples_index, nbr)
-	print(res)
-	return res
+	
+	return diversity_filter(uncertain_samples, uncertain_samples_index, nbr)
 
 def uncertainty_filter(samples, nbr, classifier) : 
 	"""
@@ -120,7 +129,7 @@ def diversity_filter(samples, uncertain_samples_index, nbr) :
 		Keep only 'nbr' samples based on a diversity criterion (bruzzone2009 : Active Learning For Classification Of Remote Sensing Images)
 		Return the indexes of samples to keep
 	"""
-	L = 0.2
+	L = config['DIVERSITY'].getfloat('Lambda')
 	m = samples.shape[0]	# Number of samples
 
 	samples_cpy = np.empty(samples.shape)
@@ -164,8 +173,8 @@ def average_distance(samples) :
 
 def learning(X, y, ID, steps, iterations, sample_selection) :
 
-	m = 60 	#number of training examples
-	p = 800	#pool of unlabeled samples
+	m = config['POOL'].getint('StartWith')	#number of initial training examples
+	p = config['POOL'].getint('UnlabeledPool')	#pool of unlabeled samples
 
 
 	# Training set
@@ -209,9 +218,9 @@ def learning(X, y, ID, steps, iterations, sample_selection) :
 
 def main() :
 	
-	steps = 5 # Number of sample to label at each iteration
-	iterations = 40 # Number of iteration in the active learning process
-	repeated = 30 #number of runs for the average score
+	steps = config['LEARNING'].getint('Steps') # Number of sample to label at each iteration
+	iterations = config['LEARNING'].getint('Iterations') # Number of iteration in the active learning process
+	repeated = config['TESTS'].getint('Trials') #number of runs for the average score
 	
 	score_active = np.empty([repeated, iterations])
 	score_active_diversity = np.empty([repeated, iterations])
@@ -234,13 +243,14 @@ def main() :
 	for i in range(repeated) :
 		X, y, ID = load_data('training_sample.csv')
 		scores = learning(X, y, ID, steps, iterations, active_sample_selection)
-		print("Active learning ({})".format(i))
+		print("Active learning without diversity criterion ({})".format(i))
 		score_active[i] = scores
 
 	
 
+	start = config['POOL'].getint('StartWith')
 
-	draw_graph(score_active, score_active_diversity, score_random, np.arange(20, 20+iterations*steps, steps))
+	draw_graph(score_active, score_active_diversity, score_random, np.arange(start, start+iterations*steps, steps))
 	
 	
 

@@ -76,9 +76,10 @@ class Test (unittest.TestCase) :
 		f = [3, 	1]
 		g = [1, 	2]
 		h = [9, 	5]
-		samples = np.array([a, b, b_bis, c, d, e, f, g, h])
+		i = [49, 	4] # This sample is not send to the diversity filter
+		samples = np.array([a, b, b_bis, c, d, e, f, g, h, i])
 
-		selected_samples = diversity_filter(samples, 4)
+		selected_samples = diversity_filter(samples, np.arange(9), 4)
 
 		self.assertTrue(0 not in selected_samples)
 		self.assertTrue((1 in selected_samples) ^ (2 in selected_samples))	# Either b or b_bis is kept
@@ -89,7 +90,7 @@ class Test (unittest.TestCase) :
 		self.assertTrue(7 not in selected_samples)
 		self.assertTrue(8 in selected_samples)
 
-		self.assertTrue((samples == np.array([a, b, b_bis, c, d, e, f, g, h])).all())	# Check that the original array was not modified
+		self.assertTrue((samples == np.array([a, b, b_bis, c, d, e, f, g, h, i])).all())	# Check that the original array was not modified
 
 
 
