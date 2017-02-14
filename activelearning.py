@@ -9,6 +9,7 @@ from sklearn.metrics.pairwise import rbf_kernel
 
 import numpy as np 
 import time
+import sys
 
 import matplotlib.pyplot as plt
 
@@ -27,16 +28,16 @@ def draw_graph(score_active, score_active_diversity, score_random, examples) :
 	fig, ax = plt.subplots(1)
 	
 	
-	ax.plot(examples, mu1, lw=2, label='Active learning', color='blue')
+	ax.plot(examples, mu1, lw=2, label='Active learning without diversity criterion', color='blue')
 	#ax.fill_between(examples, mu1+sigma1, mu1-sigma1, facecolor='blue', alpha=0.5)
 	ax.plot(examples, mu2, lw=2, label='Active learning with diversity criterion', color='green')
-	ax.plot(examples, mu3, lw=2, label='Random learning without diversity criterion', color='yellow')
+	ax.plot(examples, mu3, lw=2, label='Random learning', color='yellow')
 	#ax.fill_between(examples, mu2+sigma2, mu2-sigma2, facecolor='yellow', alpha=0.5)
 	ax.legend(loc='upper left')
 	ax.set_ylabel('Score')
-	ax.set_xlabel('Training examples')
+	ax.set_xlabel('Number of training examples')
 
-	ax.grid()
+	ax.grid(25)
 	plt.show()
 
 
@@ -278,4 +279,5 @@ def main() :
 
 
 if __name__ == '__main__' :
+	
 	main()

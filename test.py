@@ -76,7 +76,7 @@ class Test (unittest.TestCase) :
 		f = [3, 	1]
 		g = [1, 	2]
 		h = [9, 	5]
-		i = [49, 	4] # This sample is not send to the diversity filter
+		i = [49, 	4] # This sample is not sent to the diversity filter
 		samples = np.array([a, b, b_bis, c, d, e, f, g, h, i])
 
 		selected_samples = diversity_filter(samples, np.arange(9), 4)
