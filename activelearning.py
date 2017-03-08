@@ -1,3 +1,4 @@
+import numpy as np 
 from sklearn import svm
 from sklearn import preprocessing
 import configparser
@@ -7,7 +8,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics.pairwise import rbf_kernel
 
-import numpy as np 
+
 import time
 import sys
 
@@ -217,7 +218,7 @@ def learning(X, y, ID, steps, iterations, sample_selection) :
 
 	return iterations_score
 
-def main() :
+def test() :
 	
 	steps = config['LEARNING'].getint('Steps') # Number of sample to label at each iteration
 	iterations = config['LEARNING'].getint('Iterations') # Number of iteration in the active learning process
@@ -256,7 +257,7 @@ def main() :
 	
 
 	#plt.plot(score_active, [x for x in range(0, len(score_active))])
-	
+	"""
 	parameters = {
 		'kernel': ('linear', 'rbf'),
 		'C':[ 10, 5, 1, 1e-3],
@@ -275,9 +276,14 @@ def main() :
 
 	print(clf.best_score_)
 	print(clf.best_params_)
-	
+	"""
 
+def main() :
+	print("hello")
 
 if __name__ == '__main__' :
-	
-	main()
+
+	if sys.argv[1] == 'test' :
+		test()
+	else :
+		main()
