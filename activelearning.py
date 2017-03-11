@@ -1,7 +1,52 @@
+#!/usr/bin/env python
+# encoding: utf-8
+#******************************************************************
+#*
+#* MODULE:		activelearning
+#*
+#* AUTHOR(S)	Lucas Lefèvre
+#*
+#* PURPOSE:		Remote image classification
+#*
+#* COPYRIGHT:	(C) 2017 Lucas Lefèvre
+#*				Bruxelles, Belgique
+#*
+#******************************************************************
+
+#%module
+#% description: Remote image classification
+#%end
+#%option
+#% key: training_set
+#% type: string
+#% gisprompt: file, dsn
+#% answer:
+#% description: Training set (csv format)
+#% required: yes
+#%end
+#%option
+#% key: test_set
+#% type: string
+#% gisprompt: file, dsn
+#% answer:
+#% description: Test set (csv format)
+#% required: yes
+#%end
+#%option
+#% key: unlabeled_set
+#% type: string
+#% gisprompt: file, dsn
+#% answer:
+#% description: Unlabeled samples (csv format)
+#% required: yes
+#%end
+
+import grass.script as grass
+
 import numpy as np 
 from sklearn import svm
 from sklearn import preprocessing
-import configparser
+import ConfigParser as configparser
 
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import GridSearchCV
@@ -14,8 +59,116 @@ import sys
 
 import matplotlib.pyplot as plt
 
-config = configparser.ConfigParser()
-config.read("config.ini")
+
+def auto_learning(X, y, ID, steps, iterations, sample_selection) :
+	"""
+	Functiun for testing purposes only.  We already know the label of every sample (X, y).
+	Automaticaly get the labels from parameter y at each learning iteration.
+	"""
+
+	m = test_start_with	#number of initial training examples
+	p = test_unlabeled_pool	#pool of unlabeled samples
+
+
+	# Training set
+	X_train = X[:m,:]
+	y_train = y[:m]
+	ID_train = ID[:m]
+
+	# Pool of unlabeled data
+	X_pool = X[m:p,:]
+	y_pool = y[m:p]
+	ID_pool = ID[m:p]
+
+	# Test set
+	X_test = X[p:,:]
+	y_test = y[p:]
+	ID_test = ID[p:]
+
+	iterations_score = np.empty(iterations)
+
+	for i in range(0, iterations) :
+
+		if(X_pool.size == 0) :
+			raise Exception("Pool of unlabeled samples empty")
+
+		classifier = train(X_train, y_train)
+		score = classifier.score(X_test, y_test)
+		#print('({}) Score : {} | {} labeled samples | {} samples in the pool'.format(i, score, X_train.shape[0],X_pool.shape[0]))
+		
+		iterations_score[i] = score
+		samples_to_label = sample_selection(X_pool, steps, classifier)
+		
+		# Add new labeled samples to the training set
+		X_train = np.concatenate((X_train,  X_pool[samples_to_label]), axis=0)
+		y_train = np.concatenate((y_train,  y_pool[samples_to_label]), axis=0)
+
+		# Delete new labeled samples from the pool
+		X_pool = np.delete(X_pool, samples_to_label, axis=0)
+		y_pool = np.delete(y_pool, samples_to_label, axis=0)
+
+	return iterations_score
+
+def testing() :
+	
+	steps = learning_steps # Number of sample to label at each iteration
+	iterations = learning_iterations # Number of iteration in the active learning process
+	repeated = test_trials #number of runs for the average score
+	
+	score_active = np.empty([repeated, iterations])
+	score_active_diversity = np.empty([repeated, iterations])
+	score_random = np.empty([repeated, iterations])
+	
+	
+	
+	for i in range(repeated) :
+		X, y, ID = load_data('training_sample.csv')
+		scores = learning(X, y, ID, steps, iterations, random_sample_selection)
+		print("Random learning ({})".format(i))
+		score_random[i] = scores
+
+	for i in range(repeated) :
+		X, y, ID = load_data('training_sample.csv')
+		scores = learning(X, y, ID, steps, iterations, active_diversity_sample_selection)
+		print("Acitve learning with diversity criterion ({})".format(i))
+		score_active_diversity[i] = scores
+	
+	for i in range(repeated) :
+		X, y, ID = load_data('training_sample.csv')
+		scores = learning(X, y, ID, steps, iterations, active_sample_selection)
+		print("Active learning without diversity criterion ({})".format(i))
+		score_active[i] = scores
+
+	
+
+	start = test_start_with
+
+	draw_graph(score_active, score_active_diversity, score_random, np.arange(start, start+iterations*steps, steps))
+	
+	
+
+	#plt.plot(score_active, [x for x in range(0, len(score_active))])
+	"""
+	parameters = {
+		'kernel': ('linear', 'rbf'),
+		'C':[ 10, 5, 1, 1e-3],
+		'gamma' : np.logspace(-2, 2, 5),
+		'decision_function_shape':('ovo', 'ovr')
+	}
+
+	svr = svm.SVC()
+	clf = GridSearchCV(svr, parameters, n_jobs=4, verbose=0)
+
+	t0 = time.time()
+	clf.fit(X[:100], y[:100])
+
+	print("Parameters searched in " + str((time.time() - t0)) + " second(s)")
+
+
+	print(clf.best_score_)
+	print(clf.best_params_)
+	"""
+
 
 def draw_graph(score_active, score_active_diversity, score_random, examples) :
 	mu1 = score_active.mean(axis=0)
@@ -42,18 +195,22 @@ def draw_graph(score_active, score_active_diversity, score_random, examples) :
 	plt.show()
 
 
-def load_data(file_path) :
+def load_data(file_path, labeled=False) :
 
 	data = np.genfromtxt(file_path, delimiter=',', skip_header=1)
 	#np.random.shuffle(data)
 
 	ID = data[:,0] #get only row 0
-	y = data[:,1] #get only row 1
-	X = data[:,2:] #remove ID and label
+	if labeled :
+		y = data[:,1] #get only row 1
+		X = data[:,2:] #remove ID and label
+	else :
+		y = []
+		X = data[:,1:] #remove ID
 
 	X = preprocessing.scale(X)
 	#X = linear_scale(X)
-	return X, y, ID
+	return X, ID, y
 
 def linear_scale(data) :
 	"""
@@ -65,7 +222,7 @@ def linear_scale(data) :
 	return (data-p5)/(p95-p5)
 
 def train(X, y) :
-	classifier = svm.SVC(kernel='rbf', C=10, gamma=0.01, probability=True,decision_function_shape='ovo')
+	classifier = svm.SVC(kernel='rbf', C=10, gamma=0.01, probability=True,decision_function_shape='ovo', random_state=1938475632)
 	t0 = time.time()
 	classifier.fit(X, y)
 
@@ -85,7 +242,7 @@ def active_diversity_sample_selection(X_unlabled, nbr, classifier) :
 		Select a number of samples to label based on uncertainety and diversity
 	"""
 	
-	batch_size = config['DIVERSITY'].getint('SelectFrom')	# Number of samples to select with the uncertainty criterion
+	batch_size = diversity_select_from	# Number of samples to select with the uncertainty criterion
 
 	uncertain_samples_index = uncertainty_filter(X_unlabled, batch_size, classifier)	# Take twice as many samples as needed
 	uncertain_samples = X_unlabled[uncertain_samples_index]
@@ -131,7 +288,7 @@ def diversity_filter(samples, uncertain_samples_index, nbr) :
 		Keep only 'nbr' samples based on a diversity criterion (bruzzone2009 : Active Learning For Classification Of Remote Sensing Images)
 		Return the indexes of samples to keep
 	"""
-	L = config['DIVERSITY'].getfloat('Lambda')
+	L = diversity_lambda
 	m = samples.shape[0]	# Number of samples
 
 	samples_cpy = np.empty(samples.shape)
@@ -161,6 +318,7 @@ def distance_to_closest(samples, distances=None) :
 	
 	return dist_with_closest
 
+
 def average_distance(samples) :
 	"""
 		For each sample, computes the average distance to all other samples  
@@ -173,117 +331,44 @@ def average_distance(samples) :
 	
 	return average_dist
 
-def learning(X, y, ID, steps, iterations, sample_selection) :
-
-	m = config['POOL'].getint('StartWith')	#number of initial training examples
-	p = config['POOL'].getint('UnlabeledPool')	#pool of unlabeled samples
+def learning(X_train, y_train, X_test, y_test, X_unlabeled, ID_unlabeled, steps, sample_selection) :
 
 
-	# Training set
-	X_train = X[:m,:]
-	y_train = y[:m]
-	ID_train = ID[:m]
 
-	# Pool of unlabeled data
-	X_pool = X[m:p,:]
-	y_pool = y[m:p]
-	ID_pool = ID[m:p]
+	if(X_unlabeled.size == 0) :
+		raise Exception("Pool of unlabeled samples empty")
 
-	# Test set
-	X_test = X[p:,:]
-	y_test = y[p:]
-	ID_test = ID[p:]
-
-	iterations_score = np.empty(iterations)
-
-	for i in range(0, iterations) :
-
-		if(X_pool.size == 0) :
-			raise Exception("Pool of unlabeled samples empty")
-
-		classifier = train(X_train, y_train)
-		score = classifier.score(X_test, y_test)
-		#print('({}) Score : {} | {} labeled samples | {} samples in the pool'.format(i, score, X_train.shape[0],X_pool.shape[0]))
-		
-		iterations_score[i] = score
-		samples_to_label = sample_selection(X_pool, steps, classifier)
-		
-		# Add new labeled samples to the training set
-		X_train = np.concatenate((X_train,  X_pool[samples_to_label]), axis=0)
-		y_train = np.concatenate((y_train,  y_pool[samples_to_label]), axis=0)
-
-		# Delete new labeled samples from the pool
-		X_pool = np.delete(X_pool, samples_to_label, axis=0)
-		y_pool = np.delete(y_pool, samples_to_label, axis=0)
-
-	return iterations_score
-
-def test() :
-	
-	steps = config['LEARNING'].getint('Steps') # Number of sample to label at each iteration
-	iterations = config['LEARNING'].getint('Iterations') # Number of iteration in the active learning process
-	repeated = config['TESTS'].getint('Trials') #number of runs for the average score
-	
-	score_active = np.empty([repeated, iterations])
-	score_active_diversity = np.empty([repeated, iterations])
-	score_random = np.empty([repeated, iterations])
+	classifier = train(X_train, y_train)
+	score = classifier.score(X_test, y_test)
 	
 	
-	
-	for i in range(repeated) :
-		X, y, ID = load_data('training_sample.csv')
-		scores = learning(X, y, ID, steps, iterations, random_sample_selection)
-		print("Random learning ({})".format(i))
-		score_random[i] = scores
+	samples_to_label = sample_selection(X_unlabeled, steps, classifier)
 
-	for i in range(repeated) :
-		X, y, ID = load_data('training_sample.csv')
-		scores = learning(X, y, ID, steps, iterations, active_diversity_sample_selection)
-		print("Acitve learning with diversity criterion ({})".format(i))
-		score_active_diversity[i] = scores
-	
-	for i in range(repeated) :
-		X, y, ID = load_data('training_sample.csv')
-		scores = learning(X, y, ID, steps, iterations, active_sample_selection)
-		print("Active learning without diversity criterion ({})".format(i))
-		score_active[i] = scores
+	return ID_unlabeled[samples_to_label], score
 
-	
-
-	start = config['POOL'].getint('StartWith')
-
-	draw_graph(score_active, score_active_diversity, score_random, np.arange(start, start+iterations*steps, steps))
-	
-	
-
-	#plt.plot(score_active, [x for x in range(0, len(score_active))])
-	"""
-	parameters = {
-		'kernel': ('linear', 'rbf'),
-		'C':[ 10, 5, 1, 1e-3],
-		'gamma' : np.logspace(-2, 2, 5),
-		'decision_function_shape':('ovo', 'ovr')
-	}
-
-	svr = svm.SVC()
-	clf = GridSearchCV(svr, parameters, n_jobs=4, verbose=0)
-
-	t0 = time.time()
-	clf.fit(X[:100], y[:100])
-
-	print("Parameters searched in " + str((time.time() - t0)) + " second(s)")
+def main(options, flags) :
+	print("Active Learning")
 
 
-	print(clf.best_score_)
-	print(clf.best_params_)
-	"""
+	X_train, ID_train, y_train = load_data(options['training_set'], labeled = True)
+	X_test, ID_test, y_test = load_data(options['test_set'], labeled = True)
+	X_unlabeled, ID_unlabeled, y_unlabeled = load_data(options['unlabeled_set'])
 
-def main() :
-	print("hello")
+	samples_to_label_IDs, score = learning(X_train, y_train, X_test, y_test, X_unlabeled, ID_unlabeled, learning_steps, active_diversity_sample_selection)
+	print('Score : {} | {} labeled samples | {} unlabeled samples | {} test samples '.format(score, X_train.shape[0],X_unlabeled.shape[0],X_test.shape[0]))
+	print('Label the following samples to improve the score :')
+	print(samples_to_label_IDs)
 
 if __name__ == '__main__' :
+	options, flags = grass.parser()
 
-	if sys.argv[1] == 'test' :
-		test()
-	else :
-		main()
+	# Some global variables (the user will be able to choose the value)
+	learning_steps = 5			# Number of samples to label at each iteration
+	learning_iterations = 50	# Number of iterations for the active learning process
+	diversity_lambda = 0.25		# Lambda parameter used in the diversity heuristic
+	diversity_select_from = 15 	# Number of samples to select (based on uncertainty criterion) before applying the diversity criterion. Must be at least greater or equal to [LEARNING][steps]
+	test_trials = 80			# Number of trials for computing the average scores
+	test_start_with = 60		# Number of labeled samples to use for the first iteration
+	test_unlabeled_pool = 800	# Number of unlabeled samples
+
+	main(options, flags)
