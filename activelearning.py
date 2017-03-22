@@ -40,8 +40,52 @@
 #% description: Unlabeled samples (csv format)
 #% required: yes
 #%end
+#%option
+#% key: learning_steps
+#% type: integer
+#% description: Number of samples to label at each iteration
+#% required: no
+#%end
+#%option
+#% key: diversity_select_from
+#% type: integer
+#% description: Number of samples to select (based on uncertainty criterion) before applying the diversity criterion.
+#% required: no
+#%end
+#%option
+#% key: diversity_lambda
+#% type: double
+#% description: Lambda parameter used in the diversity heuristic
+#% required: no
+#%end
+#%option
+#% key: c_parameter
+#% type: double
+#% description: Penalty parameter C of the error term
+#% required: no
+#%end
+#%option
+#% key: gamma_parameter
+#% type: double
+#% description: Kernel coefficient
+#% required: no
+#%end
 
-import grass.script as grass
+
+"""
+	learning_steps = 5			# Number of samples to label at each iteration
+	learning_iterations = 50	# Number of iterations for the active learning process
+	diversity_lambda = 0.25		# Lambda parameter used in the diversity heuristic
+	diversity_select_from = 15 	# Number of samples to select (based on uncertainty criterion) before applying the diversity criterion. Must be at least greater or equal to [LEARNING][steps]
+	test_trials = 80			# Number of trials for computing the average scores
+	test_start_with = 60		# Number of labeled samples to use for the first iteration
+	test_unlabeled_pool = 800	# Number of unlabeled samples
+
+"""
+
+import grass as grass
+from grass.script.core import gisenv
+from grass.pygrass import raster
 
 import numpy as np 
 from sklearn import svm
@@ -221,8 +265,8 @@ def linear_scale(data) :
 	
 	return (data-p5)/(p95-p5)
 
-def train(X, y) :
-	classifier = svm.SVC(kernel='rbf', C=10, gamma=0.01, probability=True,decision_function_shape='ovo', random_state=1938475632)
+def train(X, y, c_parameter, gamma_parameter) :
+	classifier = svm.SVC(kernel='rbf', C=c_parameter, gamma=gamma_parameter, probability=True,decision_function_shape='ovo', random_state=1938475632)
 	t0 = time.time()
 	classifier.fit(X, y)
 
@@ -300,7 +344,7 @@ def diversity_filter(samples, uncertain_samples_index, nbr) :
 
 		dist_to_closest = distance_to_closest(samples_cpy)
 		average_dist = average_distance(samples_cpy)
-		discard = np.argmax(L*dist_to_closest + (1-L) * (1/m) * average_dist)
+		discard = np.argmax(L*dist_to_closest + ((1-L) * (1/m) * average_dist))
 		
 		selected_sample_index = np.delete(selected_sample_index, discard)	# Remove the sample to discard
 		samples_cpy = np.delete(samples_cpy, discard, axis=0)
@@ -338,7 +382,10 @@ def learning(X_train, y_train, X_test, y_test, X_unlabeled, ID_unlabeled, steps,
 	if(X_unlabeled.size == 0) :
 		raise Exception("Pool of unlabeled samples empty")
 
-	classifier = train(X_train, y_train)
+	c_parameter, gamma_parameter = SVM_parameters(options['c_parameter'], options['gamma_parameter'], X_train, y_train)
+	print('Parameter used : C={}, gamma={}, lambda={}'.format(c_parameter, gamma_parameter, diversity_lambda))
+	
+	classifier = train(X_train, y_train, c_parameter, gamma_parameter)
 	score = classifier.score(X_test, y_test)
 	
 	
@@ -346,29 +393,78 @@ def learning(X_train, y_train, X_test, y_test, X_unlabeled, ID_unlabeled, steps,
 
 	return ID_unlabeled[samples_to_label], score
 
+def SVM_parameters(c, gamma, X_train, y_train) :
+
+	parameters = {}
+	if c == '' :
+		parameters['C'] = [ 10, 5, 1, 1e-3]
+	if gamma == '' :
+		parameters['gamma'] = np.logspace(-2, 2, 5)
+	
+	if parameters != {} :
+		svr = svm.SVC()
+		clf = GridSearchCV(svr, parameters, verbose=0)
+		clf.fit(X_train, y_train)
+
+	if c == '' :
+		c = clf.best_params_['C']
+	if gamma == '' :
+		gamma = clf.best_params_['gamma']
+	return float(c), float(gamma)
+
 def main(options, flags) :
 	print("Active Learning")
-
 
 	X_train, ID_train, y_train = load_data(options['training_set'], labeled = True)
 	X_test, ID_test, y_test = load_data(options['test_set'], labeled = True)
 	X_unlabeled, ID_unlabeled, y_unlabeled = load_data(options['unlabeled_set'])
+	
 
 	samples_to_label_IDs, score = learning(X_train, y_train, X_test, y_test, X_unlabeled, ID_unlabeled, learning_steps, active_diversity_sample_selection)
-	print('Score : {} | {} labeled samples | {} unlabeled samples | {} test samples '.format(score, X_train.shape[0],X_unlabeled.shape[0],X_test.shape[0]))
+	
+	print('Training set : {}'.format(X_train.shape[0]))
+	print('Test set : {}'.format(X_test.shape[0]))
+	print('Unlabeled set : {}'.format(X_unlabeled.shape[0]))
+	print('Score : {}'.format(score))
+	print('--------------------------')
 	print('Label the following samples to improve the score :')
 	print(samples_to_label_IDs)
+	print('--------------------------')
+
+
+
+	"""
+	segments = raster.RasterRow('geobia')
+	print(segments.exist())
+	segments.open()
+	print(segments.is_open())
+	print(segments.info)
+	print(segments[30546:30566])
+	
+	segments.close()
+ 	import wx
+ 	from gui import MainWindow
+
+
+ 	app = wx.App(False)
+ 	frame = MainWindow(None, "Active Learning")
+ 	app.MainLoop()
+ 	"""
 
 if __name__ == '__main__' :
-	options, flags = grass.parser()
+	options, flags = grass.script.parser()
+
+	
 
 	# Some global variables (the user will be able to choose the value)
-	learning_steps = 5			# Number of samples to label at each iteration
-	learning_iterations = 50	# Number of iterations for the active learning process
-	diversity_lambda = 0.25		# Lambda parameter used in the diversity heuristic
-	diversity_select_from = 15 	# Number of samples to select (based on uncertainty criterion) before applying the diversity criterion. Must be at least greater or equal to [LEARNING][steps]
+	learning_steps = int(options['learning_steps']) if options['learning_steps'] != '' else 5					# Number of samples to label at each iteration
+	diversity_lambda = float(options['diversity_lambda']) if options['diversity_lambda'] != '' else 0.25		# Lambda parameter used in the diversity heuristic
+	diversity_select_from = int(options['diversity_select_from']) if options['diversity_select_from'] != '' else 15 	# Number of samples to select (based on uncertainty criterion) before applying the diversity criterion. Must be at least greater or equal to [LEARNING][steps]
+
+	# Only for testing purposes
 	test_trials = 80			# Number of trials for computing the average scores
 	test_start_with = 60		# Number of labeled samples to use for the first iteration
 	test_unlabeled_pool = 800	# Number of unlabeled samples
-
+	learning_iterations = 50	# Number of iterations for the active learning process
+	
 	main(options, flags)
