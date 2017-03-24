@@ -1,0 +1,92 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+	<title>GRASS GIS manual: activelearning.py</title>
+	<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+	<link rel="stylesheet" href="grassdocs.css" type="text/css">
+</head>
+<body bgcolor="white">
+	<div id="container">
+		<a href="index.html"><img src="grass_logo.png" alt="GRASS logo"></a>
+		
+		<hr class="header">
+		<h2>NAME</h2>
+		<em><b>activelearning.py</b></em>  - Classification of raster areas with active learning.
+
+		<h2>KEYWORDS</h2>
+		<a href="http://grass.osgeo.org/grass72/manuals/classification.html">classification</a>
+		<a href="http://grass.osgeo.org/grass72/manuals/keywords.html#machine learning">machine learning</a>
+		<a href="http://grass.osgeo.org/grass72/manuals/keywords.html#scikit-learn">scikit-learn</a>
+		
+		<h2>SYNOPSIS</h2>
+		<div id="name"><b>activelearning.py</b><br></div>
+		<b>activelearning.py --help</b><br>
+		<div id="synopsis"><b>activelearning.py</b> <b>training_set</b>=<em>string</em> <b>test_set</b>=<em>string</em> <b>unlabeled_set</b>=<em>string</em>  [<b>learning_steps</b>=<em>integer</em>]   [<b>diversity_select_from</b>=<em>integer</em>]   [<b>diversity_lambda</b>=<em>float</em>]   [<b>c_parameter</b>=<em>float</em>]   [<b>gamma_parameter</b>=<em>float</em>]   [--<b>help</b>]  [--<b>verbose</b>]  [--<b>quiet</b>]  [--<b>ui</b>] 
+		</div>
+		<div id="flags">
+			<h3>Flags:</h3>
+			<dl>
+				<dt><b>--help</b></dt>
+				<dd>Print usage summary</dd>
+				<dt><b>--verbose</b></dt>
+				<dd>Verbose module output</dd>
+				<dt><b>--quiet</b></dt>
+				<dd>Quiet module output</dd>
+				<dt><b>--ui</b></dt>
+				<dd>Force launching GUI dialog</dd>
+			</dl>
+		</div>
+		<div id="parameters">
+			<h3>Parameters:</h3>
+			<dl>
+				<dt><b>training_set</b>=<em>string</em>&nbsp;<b>[required]</b></dt>
+				<dd>Training set (csv file)</dd>
+				<dt><b>test_set</b>=<em>string</em>&nbsp;<b>[required]</b></dt>
+				<dd>Test set (csv file)</dd>
+				<dt><b>unlabeled_set</b>=<em>string</em>&nbsp;<b>[required]</b></dt>
+				<dd>Unlabeled samples (csv file)</dd>
+				<dd>Default: <em></em></dd>
+				<dt><b>learning_steps</b>=<em>integer</em></dt>
+				<dd>Number of samples to label at each iteration</dd>
+				<dt><b>diversity_select_from</b>=<em>integer</em></dt>
+				<dd>Number of samples to select (based on uncertainty criterion) before applying the diversity criterion.</dd>
+				<dt><b>diversity_lambda</b>=<em>float</em></dt>
+				<dd>Lambda parameter used in the diversity heuristic</dd>
+				<dt><b>c_parameter</b>=<em>float</em></dt>
+				<dd>Penalty parameter C of the error term</dd>
+				<dt><b>gamma_parameter</b>=<em>float</em></dt>
+				<dd>Kernel coefficient</dd>
+			</dl>
+		</div>
+		<div id="description">
+			<h2>DESCRIPTION</h2>
+			<p>
+				This module uses SVM from the <em> scikit learn </em> python package to perform classification on regions of raster maps. These regions can be the output of 
+				<em><a href="http://grass.osgeo.org/grass72/manuals/i.segment.html">i.segment</a></em> 
+				or
+				<em><a href="http://grass.osgeo.org/grass72/manuals/r.clump.html">r.clump</a></em>.
+			</p>
+			<p>
+				The module enables learning with only a small initial labeled data set via <em>active learning</em>. This semi-supervised learning algorithm interactively query the user to label the regions that are most useful to improve the overall classification score.
+				With this technique, the number of examples to learn the classification is often much lower than the number of examples needed in normal supervised algorithm.
+			</p>
+			<p>
+				Data for the training set, test set and the unlabeled set should be in a file in csv format (for example coming from the <em><a href="https://grass.osgeo.org/grass72/manuals/addons/i.segment.stats.html">i.segment.stats</a>
+				</em> module) with features for every region. A header containing the feature's name should be the first line of the file and all examples should be uniquely identified by the first column. The classes for the training and test examples should be the second column.
+			</p>
+		</div>
+		<div id=notes>
+			<h2>NOTES</h2>
+			<p>
+				This module requires the <em> scikit-learn </em> python package. This module needs to be installed in your GRASS GIS Python environment. Please refer to <a href="https://grass.osgeo.org/grass72/manuals/addons/r.learn.ml.html"><em>r.learn.ml</em></a>'s Notes to install this package.
+			</p>
+		</div>
+
+		<div id="references">
+			<h2>REFERENCES</h2>
+			<p>Bruzzone, L., & Persello, C. (2009). Active learning for classification of remote sensing images. 2009 IEEE International Geoscience and Remote Sensing Symposium. doi:10.1109/igarss.2009.5417857</p>
+			<p>Tuia, D., Volpi, M., Copa, L., Kanevski, M., & Munoz-Mari, J. (2011). A Survey of Active Learning Algorithms for Supervised Remote Sensing Image Classification. IEEE Journal of Selected Topics in Signal Processing, 5(3), 606-617. doi:10.1109/jstsp.2011.2139193</p>
+
+		</div>
+	</body>
+	</html>
