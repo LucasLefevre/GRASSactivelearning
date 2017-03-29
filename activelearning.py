@@ -2,7 +2,7 @@
 # encoding: utf-8
 #******************************************************************
 #*
-#* MODULE:		activelearning
+#* MODULE:		r.objects.activelearning
 #*
 #* AUTHOR(S)	Lucas Lefèvre
 #*
@@ -83,9 +83,11 @@
 
 """
 
+
 import grass as grass
 from grass.script.core import gisenv
 from grass.pygrass import raster
+
 
 import numpy as np 
 from sklearn import svm
@@ -106,8 +108,23 @@ import matplotlib.pyplot as plt
 
 def auto_learning(X, y, ID, steps, iterations, sample_selection) :
 	"""
-	Functiun for testing purposes only.  We already know the label of every sample (X, y).
+	Function for testing purposes only.  We already know the label of every sample (X, y).
 	Automaticaly get the labels from parameter y at each learning iteration.
+	
+	:param X: Features 
+	:param y: Labels 
+	:param ID: IDs of the samples
+	:param steps: Number of samples labeled at each iteration
+	:param_selection: Function that will be used to select the samples to label
+	
+	:type X: ndarray(#samples x #features)
+	:type y: ndarray(#samples)
+	:type ID: ndarray(#samples)
+	:type steps: int
+	:type sample_selection: callable
+	
+	:return: The final score
+	:rtype: float
 	"""
 
 	m = test_start_with	#number of initial training examples
@@ -154,6 +171,12 @@ def auto_learning(X, y, ID, steps, iterations, sample_selection) :
 	return iterations_score
 
 def testing() :
+	"""
+		Test the different heuristics.  Tested heurostics are
+			- random selection
+			- uncertainty
+			- uncertainty + diversity
+	"""
 	
 	steps = learning_steps # Number of sample to label at each iteration
 	iterations = learning_iterations # Number of iteration in the active learning process
@@ -215,6 +238,9 @@ def testing() :
 
 
 def draw_graph(score_active, score_active_diversity, score_random, examples) :
+	"""
+		Draw a graph with the score for the 3 heuristics tested (random, uncertainty only, uncertainty + diversity)
+	"""
 	mu1 = score_active.mean(axis=0)
 	sigma1 = score_active.std(axis=0)
 
@@ -239,12 +265,35 @@ def draw_graph(score_active, score_active_diversity, score_random, examples) :
 	plt.show()
 
 
-def load_data(file_path, labeled=False) :
+def load_data(file_path, labeled=False, skip_header=1, scale=True) :
 
-	data = np.genfromtxt(file_path, delimiter=',', skip_header=1)
+	"""
+	Load the data from a csv file
+
+	:param file_path: Path to the csv data file
+	:param labeled: True if the data is labeled (default=False)
+	:param skip_header: Header size (in line) (default=1)
+	:param scale: True if the data should be normalize (default=True)
+
+	:type file_path: string
+	:type labeled: boolean
+	:type skip_header: int
+	:type scale: boolean
+
+	:return: Return 4 arrays, the features X, the IDs, the labels y and the header
+	:rtype: ndarray
+	"""
+	data = np.genfromtxt(file_path, delimiter=',', skip_header=0, dtype=None)
 	#np.random.shuffle(data)
 
-	ID = data[:,0] #get only row 0
+	header = np.array([])
+
+	if skip_header != 0 :
+		header = data[0:skip_header,:]
+	data = data[skip_header:, :] #Remove header
+	data = data.astype(np.float)
+
+	ID = data[:,0] #get only row 0s
 	if labeled :
 		y = data[:,1] #get only row 1
 		X = data[:,2:] #remove ID and label
@@ -252,13 +301,41 @@ def load_data(file_path, labeled=False) :
 		y = []
 		X = data[:,1:] #remove ID
 
-	X = preprocessing.scale(X)
-	#X = linear_scale(X)
-	return X, ID, y
+	if scale :
+		X = preprocessing.scale(X)
+		#X = linear_scale(X)
+	return X, ID, y, header
+
+def write_result_file(ID, X_unlabeled, predictions, header, filename) :
+	"""
+	Write all samples with their ID and their class prediction in csv file. Also add the header to this csv file.
+
+	:param ID: Samples'IDs
+	:X_unlabeled: Samples'features
+	:predictions: Class predictin for each sample
+	:header: Header of the csv file
+	:filename: Name of the csv file
+	"""
+	data = np.copy(X_unlabeled)
+	data = np.insert(data, 0, map(str, ID), axis=1)
+	data = np.insert(data, 1, map(str, predictions), axis=1)
+
+	if header.size != 0 :
+		header = np.insert(header, 1, ['Class'])
+		data = np.insert(data.astype(str), 0, header , axis=0)
+	print("Results written in {}".format(filename))
+	np.savetxt(filename, data, delimiter=",",fmt="%s")
+	return True
 
 def linear_scale(data) :
 	"""
-		Linearly scale values : 5th percentile to 0 and 95th percentile to 1 percentile
+		Linearly scale values : 5th percentile to 0 and 95th percentile to 1
+
+		:param data: Features
+		:type data: ndarray(#samples x #features)
+
+		:return: Linearly scaled data
+		:rtype: ndarray(#samples x #features)
 	"""
 	p5 = np.percentile(data, 5, axis=0, interpolation='nearest')[np.newaxis] 	# 5th percentiles as a 2D array (-> newaxis)
 	p95 = np.percentile(data, 95, axis=0, interpolation='nearest')[np.newaxis]	# 95th percentiles as a 2D array (-> newaxis)
@@ -273,17 +350,54 @@ def train(X, y, c_parameter, gamma_parameter) :
 	return classifier
 
 def random_sample_selection(X_unlabled, nbr, classifier=None) :
+	"""
+		Randomly choose samples from X_unlabeld.
+
+		:param X_unlabeled: Pool of unlabeled samples
+		:param nbr: Number of samples to select from the pool
+		:param classifier: Not used in this function (default=None)
+
+		:type X_unlabeled: ndarray(#samples x #features)
+		:type nbr: int
+		:type classifier: sklearn.svm.SVC
+
+		:return: Indexes of chosen samples
+		:rtype: ndarray
+	"""
 	return np.random.choice(X_unlabled.shape[0], nbr)
 
 def active_sample_selection(X_unlabled, nbr, classifier) :
 	"""
 		Select a number of samples to label based only on uncertainety 
+		
+		:param X_unlabeled: Pool of unlabeled samples
+		:param nbr: Number of samples to select from the pool
+		:param classifier: Used to predict the class of each sample
+
+		:type X_unlabeled: ndarray(#samples x #features)
+		:type nbr: int
+		:type classifier: sklearn.svm.SVC
+
+		:return: Indexes of selected samples
+		:rtype: ndarray
+
 	"""
 	return uncertainty_filter(X_unlabled, nbr, classifier)
 
 def active_diversity_sample_selection(X_unlabled, nbr, classifier) :
 	"""
 		Select a number of samples to label based on uncertainety and diversity
+
+		:param X_unlabeled: Pool of unlabeled samples
+		:param nbr: Number of samples to select from the pool
+		:param classifier: Used to predict the class of each sample
+
+		:type X_unlabeled: ndarray(#samples x #features)
+		:type nbr: int
+		:type classifier: sklearn.svm.SVC
+
+		:return: Indexes of selected samples
+		:rtype: ndarray
 	"""
 	
 	batch_size = diversity_select_from	# Number of samples to select with the uncertainty criterion
@@ -291,12 +405,23 @@ def active_diversity_sample_selection(X_unlabled, nbr, classifier) :
 	uncertain_samples_index = uncertainty_filter(X_unlabled, batch_size, classifier)	# Take twice as many samples as needed
 	uncertain_samples = X_unlabled[uncertain_samples_index]
 	
-	return diversity_filter(uncertain_samples, uncertain_samples_index, nbr)
+	return diversity_filter(uncertain_samples, uncertain_samples_index, nbr, diversity_lambda)
 
 def uncertainty_filter(samples, nbr, classifier) : 
 	"""
-		Keep only 'nbr' samples based on an uncertainty criterion		
+		Keep only a few samples based on an uncertainty criterion		
 		Return the indexes of samples to keep
+
+		:param samples: Pool of unlabeled samples to select from
+		:param nbr: number of samples to select from the pool
+		:param classifier: Used to predict the class of each sample
+
+		:type X_unlabeled: ndarray(#samples x #features)
+		:type nbr: int
+		:type classifier: sklearn.svm.SVC
+
+		:return: Indexes of selected samples
+		:rtype: ndarray
 	"""
 	NBR_NEW_SAMPLE = nbr
 	decision_function = classifier.predict_proba(samples)
@@ -327,14 +452,26 @@ def uncertainty_filter(samples, nbr, classifier) :
 
 	return selected_sample_index
 
-def diversity_filter(samples, uncertain_samples_index, nbr) :
+def diversity_filter(samples, uncertain_samples_index, nbr, diversity_lambda=0.25) :
 	"""
 		Keep only 'nbr' samples based on a diversity criterion (bruzzone2009 : Active Learning For Classification Of Remote Sensing Images)
 		Return the indexes of samples to keep
+
+		:param samples: Pool of unlabeled samples
+		:param uncertain_samples: Indexes of uncertain samples in the arry of samples
+		:param nbr: number of samples to select from the pool
+		:param diversity_lambda: Heuristic parameter, between 0 and 1. Weight between the average distance to other samples and the distance to the closest sample. (default=0.25)
+
+		:type X_unlabeled: ndarray(#samples x #features)
+		:type uncertain_samples_index: ndarray(#uncertain_samples)
+		:type nbr: int
+		:type diversity_lambda: float
+
+		:return: Indexes of selected samples
+		:rtype: ndarray
 	"""
 	L = diversity_lambda
 	m = samples.shape[0]	# Number of samples
-
 	samples_cpy = np.empty(samples.shape)
 	samples_cpy[:] = samples
 
@@ -344,17 +481,21 @@ def diversity_filter(samples, uncertain_samples_index, nbr) :
 
 		dist_to_closest = distance_to_closest(samples_cpy)
 		average_dist = average_distance(samples_cpy)
-		discard = np.argmax(L*dist_to_closest + ((1-L) * (1/m) * average_dist))
-		
+		discard = np.argmax(L*dist_to_closest + (1-L) * (1./m) * average_dist)
 		selected_sample_index = np.delete(selected_sample_index, discard)	# Remove the sample to discard
 		samples_cpy = np.delete(samples_cpy, discard, axis=0)
 	
 	return selected_sample_index
 
-def distance_to_closest(samples, distances=None) :
+def distance_to_closest(samples) :
 	"""
 		For each sample, computes the distance to its closest neighbour
-		return size : #samples x 1
+
+		:param samples: Samples to consider
+		:type samples: ndarray(#samples x #features)
+
+		:return: For each sample, the distance to its closest neighbour
+		:rtype: ndarray(#samples)
 	"""
 	dist_with_samples = rbf_kernel(samples, samples) # Distance between each samples (symetric matrix)
 	np.fill_diagonal(dist_with_samples, np.NINF) # Do not take into acount the distance between a sample and itself (values on the diagonal)
@@ -365,8 +506,13 @@ def distance_to_closest(samples, distances=None) :
 
 def average_distance(samples) :
 	"""
-		For each sample, computes the average distance to all other samples  
-		return size : #samples x 1
+		For each sample, computes the average distance to all other samples
+
+		:param samples: Samples to consider
+		:type samples: ndarray(#samples x #features)
+
+		:return: For each sample, the average distance to all other samples
+		:rtype: ndarray(#samples)
 	"""
 	samples = np.asarray(samples)
 	nbr_samples = samples.shape[0]
@@ -376,22 +522,51 @@ def average_distance(samples) :
 	return average_dist
 
 def learning(X_train, y_train, X_test, y_test, X_unlabeled, ID_unlabeled, steps, sample_selection) :
+	"""
+		Train a SVM classifier with the training data, compute the score of the classifier based on testing data and 
+		make a class prediction for each sample in the unlabeled data. 
+		Find the best samples to label that would increase the most the classification score 
 
+		:param X_train: Features of training samples
+		:param y_train: Labels of training samples
+		:param X_test: Features of test samples
+		:param y_test: Labels of test samples
+		:param X_unlabeled: Features of unlabeled samples
+		:param ID_unlabeled: IDs of unlabeled samples
+		:param steps: Number of samples to label
+		:param sample_selection: Function used to select the samples to label (different heuristics)
 
+		:type X_train: ndarray(#samples x #features)
+		:type y_train: ndarray(#samples)
+		:type X_test: ndarray(#samples x #features)
+		:type y_test: ndarray(#samples)
+		:type X_unlabeled: ndarray(#samples x #features)
+		:type ID_unlabeled: ndarray(#samples)
+		:type steps: int
+		:type samples_selection: callable
+
+		:return: The IDs of samples to label, the score of the classifier and the prediction for all unlabeled samples
+		:rtype indexes: ndarray(#steps)
+		:rtype score: float
+		:rtype predictions: ndarray(#unlabeled_samples)
+	"""
 
 	if(X_unlabeled.size == 0) :
 		raise Exception("Pool of unlabeled samples empty")
 
 	c_parameter, gamma_parameter = SVM_parameters(options['c_parameter'], options['gamma_parameter'], X_train, y_train)
-	print('Parameter used : C={}, gamma={}, lambda={}'.format(c_parameter, gamma_parameter, diversity_lambda))
-	
+	print('Parameters used : C={}, gamma={}, lambda={}'.format(c_parameter, gamma_parameter, diversity_lambda))
+
 	classifier = train(X_train, y_train, c_parameter, gamma_parameter)
 	score = classifier.score(X_test, y_test)
+
+	predictions = classifier.predict(X_unlabeled)
+	
 	
 	
 	samples_to_label = sample_selection(X_unlabeled, steps, classifier)
 
-	return ID_unlabeled[samples_to_label], score
+	return ID_unlabeled[samples_to_label], score, predictions
 
 def SVM_parameters(c, gamma, X_train, y_train) :
 
@@ -415,13 +590,16 @@ def SVM_parameters(c, gamma, X_train, y_train) :
 def main(options, flags) :
 	print("Active Learning")
 
-	X_train, ID_train, y_train = load_data(options['training_set'], labeled = True)
-	X_test, ID_test, y_test = load_data(options['test_set'], labeled = True)
-	X_unlabeled, ID_unlabeled, y_unlabeled = load_data(options['unlabeled_set'])
+	X_train, ID_train, y_train, header_train = load_data(options['training_set'], labeled = True)
+	X_test, ID_test, y_test, header_test = load_data(options['test_set'], labeled = True)
+	X_unlabeled, ID_unlabeled, y_unlabeled, header_unlabeled = load_data(options['unlabeled_set'])
 	
+	samples_to_label_IDs, score, predictions = learning(X_train, y_train, X_test, y_test, X_unlabeled, ID_unlabeled, learning_steps, active_diversity_sample_selection)
+	
+	X_unlabeled, ID_unlabeled, y_unlabeled, header_unlabeled = load_data(options['unlabeled_set'], scale=False)
+	write_result_file(ID_unlabeled, X_unlabeled, predictions, header_unlabeled,  "predictions.csv")
 
-	samples_to_label_IDs, score = learning(X_train, y_train, X_test, y_test, X_unlabeled, ID_unlabeled, learning_steps, active_diversity_sample_selection)
-	
+
 	print('Training set : {}'.format(X_train.shape[0]))
 	print('Test set : {}'.format(X_test.shape[0]))
 	print('Unlabeled set : {}'.format(X_unlabeled.shape[0]))

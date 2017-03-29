@@ -93,6 +93,30 @@ class Test (unittest.TestCase) :
 		self.assertTrue((samples == np.array([a, b, b_bis, c, d, e, f, g, h, i])).all())	# Check that the original array was not modified
 
 
+	def test_write_result_file(self) :
+		X = np.array([
+			[11., 3.5, 4.7],
+			[22., 4.5, 6.7]
+		])
+		header = np.array(['ID', 'attr1','attr2', 'attr3'])
+		ID = np.array([1., 2.])
+		predictions = np.array([0,1])
+		filename = 'unittest_prediction.csv'
+
+		#ID, X_unlabeled, predictions, header, filename
+
+		write_result_file(ID, X, predictions, header, filename)
+
+		result = np.genfromtxt(filename, delimiter=',', dtype=str)
+
+		data = np.array([
+			['ID', 'Class', 'attr1','attr2', 'attr3'],
+			[1., 0., 11., 3.5, 4.7],
+			[2., 1., 22., 4.5, 6.7]
+		])
+
+		self.assertTrue((data == result).all())
+
 
 if __name__ == '__main__' :
 	unittest.main()
