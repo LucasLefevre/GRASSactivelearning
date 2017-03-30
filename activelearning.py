@@ -70,6 +70,13 @@
 #% description: Kernel coefficient
 #% required: no
 #%end
+#%option
+#% key: update
+#% type: string
+#% gisprompt: file, dsn
+#% description: Update the training set
+#% required: no
+#%end
 
 
 """
@@ -211,30 +218,6 @@ def testing() :
 	start = test_start_with
 
 	draw_graph(score_active, score_active_diversity, score_random, np.arange(start, start+iterations*steps, steps))
-	
-	
-
-	#plt.plot(score_active, [x for x in range(0, len(score_active))])
-	"""
-	parameters = {
-		'kernel': ('linear', 'rbf'),
-		'C':[ 10, 5, 1, 1e-3],
-		'gamma' : np.logspace(-2, 2, 5),
-		'decision_function_shape':('ovo', 'ovr')
-	}
-
-	svr = svm.SVC()
-	clf = GridSearchCV(svr, parameters, n_jobs=4, verbose=0)
-
-	t0 = time.time()
-	clf.fit(X[:100], y[:100])
-
-	print("Parameters searched in " + str((time.time() - t0)) + " second(s)")
-
-
-	print(clf.best_score_)
-	print(clf.best_params_)
-	"""
 
 
 def draw_graph(score_active, score_active_diversity, score_random, examples) :
@@ -268,20 +251,20 @@ def draw_graph(score_active, score_active_diversity, score_random, examples) :
 def load_data(file_path, labeled=False, skip_header=1, scale=True) :
 
 	"""
-	Load the data from a csv file
+		Load the data from a csv file
 
-	:param file_path: Path to the csv data file
-	:param labeled: True if the data is labeled (default=False)
-	:param skip_header: Header size (in line) (default=1)
-	:param scale: True if the data should be normalize (default=True)
+		:param file_path: Path to the csv data file
+		:param labeled: True if the data is labeled (default=False)
+		:param skip_header: Header size (in line) (default=1)
+		:param scale: True if the data should be normalize (default=True)
 
-	:type file_path: string
-	:type labeled: boolean
-	:type skip_header: int
-	:type scale: boolean
+		:type file_path: string
+		:type labeled: boolean
+		:type skip_header: int
+		:type scale: boolean
 
-	:return: Return 4 arrays, the features X, the IDs, the labels y and the header
-	:rtype: ndarray
+		:return: Return 4 arrays, the features X, the IDs, the labels y and the header
+		:rtype: ndarray
 	"""
 	data = np.genfromtxt(file_path, delimiter=',', skip_header=0, dtype=None)
 	#np.random.shuffle(data)
@@ -308,13 +291,13 @@ def load_data(file_path, labeled=False, skip_header=1, scale=True) :
 
 def write_result_file(ID, X_unlabeled, predictions, header, filename) :
 	"""
-	Write all samples with their ID and their class prediction in csv file. Also add the header to this csv file.
+		Write all samples with their ID and their class prediction in csv file. Also add the header to this csv file.
 
-	:param ID: Samples'IDs
-	:X_unlabeled: Samples'features
-	:predictions: Class predictin for each sample
-	:header: Header of the csv file
-	:filename: Name of the csv file
+		:param ID: Samples'IDs
+		:X_unlabeled: Samples'features
+		:predictions: Class predictin for each sample
+		:header: Header of the csv file
+		:filename: Name of the csv file
 	"""
 	data = np.copy(X_unlabeled)
 	data = np.insert(data, 0, map(str, ID), axis=1)
@@ -326,6 +309,36 @@ def write_result_file(ID, X_unlabeled, predictions, header, filename) :
 	print("Results written in {}".format(filename))
 	np.savetxt(filename, data, delimiter=",",fmt="%s")
 	return True
+
+def update(update_file, training_file, unlabeled_file) :
+	update = np.genfromtxt(update_file, delimiter=',', skip_header=1)
+	training = np.genfromtxt(training_file, delimiter=',', skip_header=0, dtype=None)
+	unlabeled = np.genfromtxt(unlabeled_file, delimiter=',', skip_header=0, dtype=None)
+	successful_updates = []
+	if update.ndim == 1 :
+		update = [update]
+
+	for index_update, row in enumerate(update) :
+		index = np.where(unlabeled == str(row[0])) # Find in 'unlabeled' the line corresping to the ID
+		if index[0].size != 0 : # Check if row exists
+			data = unlabeled[index[0][0]][1:] # Features
+			data = np.insert(data, 0, row[0], axis=0) # ID
+			data = np.insert(data, 1, row[1], axis=0) # Class
+			training = np.append(training, [data], axis=0)
+			unlabeled = np.delete(unlabeled, index[0][0], axis=0)
+			successful_updates.append(index_update)
+
+	with open(update_file) as f:
+   		header = f.readline()
+		header = header.split(',')
+	
+	update = np.delete(update, successful_updates, axis=0)
+	update = np.insert(update.astype(str), 0, header, axis=0)
+
+	# Save files
+	np.savetxt(update_file, update, delimiter=",",fmt="%s")
+	np.savetxt(training_file, training, delimiter=",",fmt="%s")
+	np.savetxt(unlabeled_file, unlabeled, delimiter=",",fmt="%s")
 
 def linear_scale(data) :
 	"""
@@ -569,6 +582,19 @@ def learning(X_train, y_train, X_test, y_test, X_unlabeled, ID_unlabeled, steps,
 	return ID_unlabeled[samples_to_label], score, predictions
 
 def SVM_parameters(c, gamma, X_train, y_train) :
+	"""
+		Determine the parameters (C and gamma) for the SVM classifier.
+		If a parameter is specified in the parameters, keep this value.
+		If it is not specified, compute the 'best' value by grid search (cross validation set)
+
+		:param c: Penalty parameter C of the error term.
+		:param gamma: Kernel coefficient
+		:param X_train: Features of the training samples
+		:param y_train: Labels of the training samples
+
+		:return: The c and gamma parameters
+		:rtype: float
+	"""
 
 	parameters = {}
 	if c == '' :
@@ -587,52 +613,14 @@ def SVM_parameters(c, gamma, X_train, y_train) :
 		gamma = clf.best_params_['gamma']
 	return float(c), float(gamma)
 
-def main(options, flags) :
-	print("Active Learning")
-
-	X_train, ID_train, y_train, header_train = load_data(options['training_set'], labeled = True)
-	X_test, ID_test, y_test, header_test = load_data(options['test_set'], labeled = True)
-	X_unlabeled, ID_unlabeled, y_unlabeled, header_unlabeled = load_data(options['unlabeled_set'])
-	
-	samples_to_label_IDs, score, predictions = learning(X_train, y_train, X_test, y_test, X_unlabeled, ID_unlabeled, learning_steps, active_diversity_sample_selection)
-	
-	X_unlabeled, ID_unlabeled, y_unlabeled, header_unlabeled = load_data(options['unlabeled_set'], scale=False)
-	write_result_file(ID_unlabeled, X_unlabeled, predictions, header_unlabeled,  "predictions.csv")
-
-
-	print('Training set : {}'.format(X_train.shape[0]))
-	print('Test set : {}'.format(X_test.shape[0]))
-	print('Unlabeled set : {}'.format(X_unlabeled.shape[0]))
-	print('Score : {}'.format(score))
-	print('--------------------------')
-	print('Label the following samples to improve the score :')
-	print(samples_to_label_IDs)
-	print('--------------------------')
-
-
-
-	"""
-	segments = raster.RasterRow('geobia')
-	print(segments.exist())
-	segments.open()
-	print(segments.is_open())
-	print(segments.info)
-	print(segments[30546:30566])
-	
-	segments.close()
- 	import wx
- 	from gui import MainWindow
-
-
- 	app = wx.App(False)
- 	frame = MainWindow(None, "Active Learning")
- 	app.MainLoop()
- 	"""
-
-if __name__ == '__main__' :
-	options, flags = grass.script.parser()
-
-	
+def main() :
+	global learning_steps
+	global diversity_lambda
+	global diversity_select_from
+	global test_trials
+	global test_start_with
+	global test_unlabeled_pool
+	global learning_iterations
 
 	# Some global variables (the user will be able to choose the value)
 	learning_steps = int(options['learning_steps']) if options['learning_steps'] != '' else 5					# Number of samples to label at each iteration
@@ -644,5 +632,29 @@ if __name__ == '__main__' :
 	test_start_with = 60		# Number of labeled samples to use for the first iteration
 	test_unlabeled_pool = 800	# Number of unlabeled samples
 	learning_iterations = 50	# Number of iterations for the active learning process
+
+
+	update(options['update'], options['training_set'], options['unlabeled_set'])
+
+	X_train, ID_train, y_train, header_train = load_data(options['training_set'], labeled = True)
+	X_test, ID_test, y_test, header_test = load_data(options['test_set'], labeled = True)
+	X_unlabeled, ID_unlabeled, y_unlabeled, header_unlabeled = load_data(options['unlabeled_set'])
 	
-	main(options, flags)
+	samples_to_label_IDs, score, predictions = learning(X_train, y_train, X_test, y_test, X_unlabeled, ID_unlabeled, learning_steps, active_diversity_sample_selection)
+	
+	X_unlabeled, ID_unlabeled, y_unlabeled, header_unlabeled = load_data(options['unlabeled_set'], scale=False)
+	write_result_file(ID_unlabeled, X_unlabeled, predictions, header_unlabeled,  "predictions.csv")
+
+	print('Training set : {}'.format(X_train.shape[0]))
+	print('Test set : {}'.format(X_test.shape[0]))
+	print('Unlabeled set : {}'.format(X_unlabeled.shape[0]))
+	print('Score : {}'.format(score))
+	print('--------------------------')
+	print('Label the following samples to improve the score :')
+	print(samples_to_label_IDs)
+	print('--------------------------')
+
+
+if __name__ == '__main__' :
+	options, flags = grass.script.parser()
+	main()
