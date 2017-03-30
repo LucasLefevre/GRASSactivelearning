@@ -44,22 +44,25 @@
 #% key: learning_steps
 #% type: integer
 #% description: Number of samples to label at each iteration
+#% answer: 5
 #% required: no
 #%end
 #%option
-#% key: diversity_select_from
+#% key: nbr_uncertainty
 #% type: integer
 #% description: Number of samples to select (based on uncertainty criterion) before applying the diversity criterion.
+#% answer: 15
 #% required: no
 #%end
 #%option
 #% key: diversity_lambda
 #% type: double
 #% description: Lambda parameter used in the diversity heuristic
+#% answer: 0.25
 #% required: no
 #%end
 #%option
-#% key: c_parameter
+#% key: c_svm
 #% type: double
 #% description: Penalty parameter C of the error term
 #% required: no
@@ -71,6 +74,14 @@
 #% required: no
 #%end
 #%option
+#% key: predictions
+#% type: string
+#% gisprompt: file, dsn
+#% description: Class predictions
+#% answer: predictions.csv
+#% required: no
+#%end
+#%option
 #% key: update
 #% type: string
 #% gisprompt: file, dsn
@@ -79,33 +90,21 @@
 #%end
 
 
-"""
-	learning_steps = 5			# Number of samples to label at each iteration
-	learning_iterations = 50	# Number of iterations for the active learning process
-	diversity_lambda = 0.25		# Lambda parameter used in the diversity heuristic
-	diversity_select_from = 15 	# Number of samples to select (based on uncertainty criterion) before applying the diversity criterion. Must be at least greater or equal to [LEARNING][steps]
-	test_trials = 80			# Number of trials for computing the average scores
-	test_start_with = 60		# Number of labeled samples to use for the first iteration
-	test_unlabeled_pool = 800	# Number of unlabeled samples
-
-"""
-
-
 import grass as grass
-from grass.script.core import gisenv
-from grass.pygrass import raster
+import grass.script as gcore
 
 
 import numpy as np 
-from sklearn import svm
-from sklearn import preprocessing
-import ConfigParser as configparser
 
-from sklearn.model_selection import train_test_split
-from sklearn.model_selection import GridSearchCV
-from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics.pairwise import rbf_kernel
-
+try :
+	from sklearn import svm
+	from sklearn import preprocessing
+	from sklearn.model_selection import train_test_split
+	from sklearn.model_selection import GridSearchCV
+	from sklearn.model_selection import StratifiedKFold
+	from sklearn.metrics.pairwise import rbf_kernel
+except ImportError :
+	gcore.fatal("This module requires the scikit-learn python package. Please install it.")
 
 import time
 import sys
@@ -162,7 +161,6 @@ def auto_learning(X, y, ID, steps, iterations, sample_selection) :
 
 		classifier = train(X_train, y_train)
 		score = classifier.score(X_test, y_test)
-		#print('({}) Score : {} | {} labeled samples | {} samples in the pool'.format(i, score, X_train.shape[0],X_pool.shape[0]))
 		
 		iterations_score[i] = score
 		samples_to_label = sample_selection(X_pool, steps, classifier)
@@ -306,11 +304,22 @@ def write_result_file(ID, X_unlabeled, predictions, header, filename) :
 	if header.size != 0 :
 		header = np.insert(header, 1, ['Class'])
 		data = np.insert(data.astype(str), 0, header , axis=0)
-	print("Results written in {}".format(filename))
 	np.savetxt(filename, data, delimiter=",",fmt="%s")
 	return True
 
 def update(update_file, training_file, unlabeled_file) :
+	"""
+		Transfer samples from the unlabeled set to the training set based on an update file 
+		with IDs of samples to transfer and their classes.
+
+		:param update_file: Path to the update file
+		:param training_file: Path the training file
+		:param unlabeled_file: Path the unlabeled file
+
+		:type update_file: string
+		:type training_file: string
+		:type unlabeled_file: string
+	"""
 	update = np.genfromtxt(update_file, delimiter=',', skip_header=1)
 	training = np.genfromtxt(training_file, delimiter=',', skip_header=0, dtype=None)
 	unlabeled = np.genfromtxt(unlabeled_file, delimiter=',', skip_header=0, dtype=None)
@@ -355,8 +364,8 @@ def linear_scale(data) :
 	
 	return (data-p5)/(p95-p5)
 
-def train(X, y, c_parameter, gamma_parameter) :
-	classifier = svm.SVC(kernel='rbf', C=c_parameter, gamma=gamma_parameter, probability=True,decision_function_shape='ovo', random_state=1938475632)
+def train(X, y, c_svm, gamma_parameter) :
+	classifier = svm.SVC(kernel='rbf', C=c_svm, gamma=gamma_parameter, probability=True,decision_function_shape='ovo', random_state=1938475632)
 	t0 = time.time()
 	classifier.fit(X, y)
 
@@ -413,7 +422,7 @@ def active_diversity_sample_selection(X_unlabled, nbr, classifier) :
 		:rtype: ndarray
 	"""
 	
-	batch_size = diversity_select_from	# Number of samples to select with the uncertainty criterion
+	batch_size = nbr_uncertainty	# Number of samples to select with the uncertainty criterion
 
 	uncertain_samples_index = uncertainty_filter(X_unlabled, batch_size, classifier)	# Take twice as many samples as needed
 	uncertain_samples = X_unlabled[uncertain_samples_index]
@@ -567,10 +576,10 @@ def learning(X_train, y_train, X_test, y_test, X_unlabeled, ID_unlabeled, steps,
 	if(X_unlabeled.size == 0) :
 		raise Exception("Pool of unlabeled samples empty")
 
-	c_parameter, gamma_parameter = SVM_parameters(options['c_parameter'], options['gamma_parameter'], X_train, y_train)
-	print('Parameters used : C={}, gamma={}, lambda={}'.format(c_parameter, gamma_parameter, diversity_lambda))
+	c_svm, gamma_parameter = SVM_parameters(options['c_svm'], options['gamma_parameter'], X_train, y_train)
+	print('Parameters used : C={}, gamma={}, lambda={}'.format(c_svm, gamma_parameter, diversity_lambda))
 
-	classifier = train(X_train, y_train, c_parameter, gamma_parameter)
+	classifier = train(X_train, y_train, c_svm, gamma_parameter)
 	score = classifier.score(X_test, y_test)
 
 	predictions = classifier.predict(X_unlabeled)
@@ -616,7 +625,7 @@ def SVM_parameters(c, gamma, X_train, y_train) :
 def main() :
 	global learning_steps
 	global diversity_lambda
-	global diversity_select_from
+	global nbr_uncertainty
 	global test_trials
 	global test_start_with
 	global test_unlabeled_pool
@@ -625,8 +634,8 @@ def main() :
 	# Some global variables (the user will be able to choose the value)
 	learning_steps = int(options['learning_steps']) if options['learning_steps'] != '' else 5					# Number of samples to label at each iteration
 	diversity_lambda = float(options['diversity_lambda']) if options['diversity_lambda'] != '' else 0.25		# Lambda parameter used in the diversity heuristic
-	diversity_select_from = int(options['diversity_select_from']) if options['diversity_select_from'] != '' else 15 	# Number of samples to select (based on uncertainty criterion) before applying the diversity criterion. Must be at least greater or equal to [LEARNING][steps]
-
+	nbr_uncertainty = int(options['nbr_uncertainty']) if options['nbr_uncertainty'] != '' else 15 	# Number of samples to select (based on uncertainty criterion) before applying the diversity criterion. Must be at least greater or equal to [LEARNING][steps]
+	predictions_file = options['predictions'] if options['predictions'] != '' else 'predictions.csv'
 	# Only for testing purposes
 	test_trials = 80			# Number of trials for computing the average scores
 	test_start_with = 60		# Number of labeled samples to use for the first iteration
@@ -634,7 +643,8 @@ def main() :
 	learning_iterations = 50	# Number of iterations for the active learning process
 
 
-	update(options['update'], options['training_set'], options['unlabeled_set'])
+	if (options['update'] !='') :
+		update(options['update'], options['training_set'], options['unlabeled_set'])
 
 	X_train, ID_train, y_train, header_train = load_data(options['training_set'], labeled = True)
 	X_test, ID_test, y_test, header_test = load_data(options['test_set'], labeled = True)
@@ -643,16 +653,15 @@ def main() :
 	samples_to_label_IDs, score, predictions = learning(X_train, y_train, X_test, y_test, X_unlabeled, ID_unlabeled, learning_steps, active_diversity_sample_selection)
 	
 	X_unlabeled, ID_unlabeled, y_unlabeled, header_unlabeled = load_data(options['unlabeled_set'], scale=False)
-	write_result_file(ID_unlabeled, X_unlabeled, predictions, header_unlabeled,  "predictions.csv")
+	write_result_file(ID_unlabeled, X_unlabeled, predictions, header_unlabeled,  predictions_file)
+	gcore.message("Class predictions written to {}".format("predictions.csv"))
+	gcore.message('Training set : {}'.format(X_train.shape[0]))
+	gcore.message('Test set : {}'.format(X_test.shape[0]))
+	gcore.message('Unlabeled set : {}'.format(X_unlabeled.shape[0]))
+	gcore.message('Score : {}'.format(score))
 
-	print('Training set : {}'.format(X_train.shape[0]))
-	print('Test set : {}'.format(X_test.shape[0]))
-	print('Unlabeled set : {}'.format(X_unlabeled.shape[0]))
-	print('Score : {}'.format(score))
-	print('--------------------------')
-	print('Label the following samples to improve the score :')
-	print(samples_to_label_IDs)
-	print('--------------------------')
+	for ID in samples_to_label_IDs :
+		print(int(ID))
 
 
 if __name__ == '__main__' :
