@@ -77,7 +77,7 @@
 #% key: predictions
 #% type: string
 #% gisprompt: file, dsn
-#% description: Class predictions
+#% description: Output file for class predictions
 #% answer: predictions.csv
 #% required: no
 #%end
@@ -92,6 +92,7 @@
 
 import grass as grass
 import grass.script as gcore
+import sys
 
 
 import numpy as np 
@@ -285,6 +286,7 @@ def load_data(file_path, labeled=False, skip_header=1, scale=True) :
 	if scale :
 		X = preprocessing.scale(X)
 		#X = linear_scale(X)
+
 	return X, ID, y, header
 
 def write_result_file(ID, X_unlabeled, predictions, header, filename) :
@@ -577,14 +579,12 @@ def learning(X_train, y_train, X_test, y_test, X_unlabeled, ID_unlabeled, steps,
 		raise Exception("Pool of unlabeled samples empty")
 
 	c_svm, gamma_parameter = SVM_parameters(options['c_svm'], options['gamma_parameter'], X_train, y_train)
-	print('Parameters used : C={}, gamma={}, lambda={}'.format(c_svm, gamma_parameter, diversity_lambda))
+	gcore.message('Parameters used : C={}, gamma={}, lambda={}'.format(c_svm, gamma_parameter, diversity_lambda))
 
 	classifier = train(X_train, y_train, c_svm, gamma_parameter)
 	score = classifier.score(X_test, y_test)
 
 	predictions = classifier.predict(X_unlabeled)
-	
-	
 	
 	samples_to_label = sample_selection(X_unlabeled, steps, classifier)
 
