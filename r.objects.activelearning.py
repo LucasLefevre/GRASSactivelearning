@@ -326,7 +326,10 @@ def update(update_file, training_file, unlabeled_file) :
 	training = np.genfromtxt(training_file, delimiter=',', skip_header=0, dtype=None)
 	unlabeled = np.genfromtxt(unlabeled_file, delimiter=',', skip_header=0, dtype=None)
 	successful_updates = []
-	if update.ndim == 1 :
+
+	if update.size == 0 :
+		return
+	elif update.ndim == 1 :
 		update = [update]
 
 	for index_update, row in enumerate(update) :
