@@ -1,5 +1,3 @@
-<link rel="stylesheet" type="text/css" href="grassdocs.css">
-
 <div id="description">
 	<h2>DESCRIPTION</h2>
 	<p>
@@ -20,13 +18,13 @@
 		<em><a href="i.segment.stats.html">i.segment.stats</a></em> 
 		module
 
-		The features of the training set, the test set and the unlabeled set should be in three diffenrent files in csv format. The first line of each file must be a header containing the features' name. Every regions should be uniquely identified by the first attribute. The classes for the training and test examples should be the second attribute.
+		The features of the training set, the test set and the unlabeled set should be in three different files in csv format. The first line of each file must be a header containing the features' name. Every regions should be uniquely identified by the first attribute. The classes for the training and test examples should be the second attribute.
 	</p>
 	<p></p>
 	<h3>Parameters</h3>
 	<ul>
-		<li>training_set : Path to the training samples file</li>
-		<li>test_set : Path to the test samples file</li>
+		<li><strong>training_set</strong> : Path to the training samples file</li>
+		<li><strong>test_set</strong> : Path to the test samples file</li>
 		Example for the training and test files :
 		<div class="code">
 			<pre>
@@ -36,7 +34,7 @@
 				173457,2,5.65,468.76,6.78
 			</pre>
 		</div>
-		<li>unlabeled : Path to the unlabeled samples file</li>
+		<li><strong>unlabeled</strong> : Path to the unlabeled samples file</li>
 		Example for the unlabeled file :
 		<div class="code">
 			<pre>
@@ -46,12 +44,13 @@
 				173457,5.65,468.76,6.78
 			</pre>
 		</div>
-		<li>learning_steps : This is the number of samples that the module will ask to label at each run.</li>
-		<li>nbr_uncertainty : Number of uncertain samples to choose before applying the diversity filter. This number should be lower than <em>learning_steps</em></li>
-		<li>diversity_lambda (between 0 and 1): Parameter used in the diversity heuristic . If close to 0, only take into account the average distance to all other samples. If close to 1, only take into account the distance to the closest neighbour</li>
-		<li>c_SVM : If it is too large, there is a risk of overfitting the training data. If it is too small you may have underfitting.</li>
-		<li>gamma_SVM:</li>
-		<li>update: Path to the update file. This file in csv format should have a header and two attributes per line : the ID of the sample you have labeled and the class itself.  If present, the module will transfer the samples to update from the unlabeled set to the training set, adding the class you have provided.  If the transfer of a sample is successful, the corresponding line in the file is deleted.</li>
+		<li><strong>learning_steps</strong> : This is the number of samples that the module will ask to label at each run.</li>
+		<li><strong>nbr_uncertainty</strong> : Number of uncertain samples to choose before applying the diversity filter. This number should be lower than <em>learning_steps</em></li>
+		<li><strong>diversity_lambda</strong> (between 0 and 1, default: 0.25): Parameter used in the diversity heuristic. If close to 0 only take into account the average distance to all other samples. If close to 1 only take into account the distance to the closest neighbour</li>
+		<li><strong>c_SVM</strong> : Penalty parameter C of the error term. If it is too large there is a risk of overfitting the training data. If it is too small you may have underfitting.</li>
+		<li><strong>gamma_SVM</strong>: Kernel coefficient. 1/#features is often a good value to start with.</li>
+		If C or gamma is left empty (or both), a good value based on the data distibution is found by cross-validation (at least 3 samples per class in the training set is needed, more is better). This automatic parameter tuning requires more computation time as the training set grows.
+		<li><strong>update</strong>: Path to the update file. This file in csv format should have a header and two attributes per line : the ID of the sample you have labeled and the label itself.  If present, the module will transfer the newly labeled samples from the unlabeled set to the training set, adding the class you have provided.  If the transfer of a sample is successful, the corresponding line in the update file is deleted.</li>
 		Example of an update file :
 		<div class="code">
 			<pre>
@@ -67,6 +66,9 @@
 	<h2>NOTES</h2>
 	<p>
 		This module requires the <em> scikit-learn </em> python package. This module needs to be installed in your GRASS GIS Python environment. Please refer to <a href="r.learn.ml.html"><em>r.learn.ml</em></a>'s Notes to install this package.
+	</p>
+	<p>
+		The memory usage for ~1450 samples of 52 features each is around ~650 kb.  This number can vary due to the unpredictablity of the garbage collector's behaviour.
 	</p>
 </div>
 
