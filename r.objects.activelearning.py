@@ -94,18 +94,20 @@ import grass as grass
 import grass.script as gcore
 import sys
 
-
-import numpy as np 
-
 try :
 	from sklearn import svm
 	from sklearn import preprocessing
 	from sklearn.model_selection import train_test_split
-	from sklearn.model_selection import GridSearchCV
+	from sklearn.model_selection import RandomizedSearchCV
 	from sklearn.model_selection import StratifiedKFold
 	from sklearn.metrics.pairwise import rbf_kernel
 except ImportError :
 	gcore.fatal("This module requires the scikit-learn python package. Please install it.")
+
+import numpy as np 
+
+import scipy 
+
 
 import time
 import sys
@@ -370,8 +372,18 @@ def linear_scale(data) :
 	return (data-p5)/(p95-p5)
 
 def train(X, y, c_svm, gamma_parameter) :
+	"""
+		Train a SVM classifier.
+
+		:param c: Penalty parameter C of the error term.
+		:param gamma: Kernel coefficient
+		:param X: Features of the training samples
+		:param y: Labels of the training samples
+
+		:return: Returns the trained classifier
+		:rtype: sklearn.svm.SVC
+	"""
 	classifier = svm.SVC(kernel='rbf', C=c_svm, gamma=gamma_parameter, probability=True,decision_function_shape='ovo', random_state=1938475632)
-	t0 = time.time()
 	classifier.fit(X, y)
 
 	return classifier
@@ -609,20 +621,21 @@ def SVM_parameters(c, gamma, X_train, y_train) :
 	"""
 
 	parameters = {}
-	if c == '' :
-		parameters['C'] = [ 10, 5, 1, 1e-3]
-	if gamma == '' :
-		parameters['gamma'] = np.logspace(-2, 2, 5)
+	if c == '' or gamma == '':
+		parameters = {'C': scipy.stats.expon(scale=100), 'gamma': scipy.stats.expon(scale=.1),
+  						'kernel': ['rbf'], 'class_weight':['balanced', None]}
 	
 	if parameters != {} :
 		svr = svm.SVC()
-		clf = GridSearchCV(svr, parameters, verbose=0)
+		clf = RandomizedSearchCV(svr, parameters, n_iter=100, n_jobs=-1, verbose=0)
 		clf.fit(X_train, y_train)
 
 	if c == '' :
 		c = clf.best_params_['C']
 	if gamma == '' :
 		gamma = clf.best_params_['gamma']
+	print(c)
+	print(gamma)
 	return float(c), float(gamma)
 
 def main() :
