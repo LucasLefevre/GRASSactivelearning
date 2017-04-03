@@ -622,9 +622,16 @@ def SVM_parameters(c, gamma, X_train, y_train, n_iter) :
 		:param gamma: Kernel coefficient
 		:param X_train: Features of the training samples
 		:param y_train: Labels of the training samples
+		:param n_iter: Number of parameter settings that are sampled. n_iter trades off runtime vs quality of the solution.
+
+		:type c: string
+		:type gamma: string
+		:type X_train: ndarray
+		:type Y_train: ndarray
+		:type n_iter: int
 
 		:return: The c and gamma parameters
-		:rtype: float
+		:rtype: floats
 	"""
 
 	parameters = {}
