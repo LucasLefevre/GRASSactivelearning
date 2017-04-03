@@ -74,6 +74,13 @@
 #% required: no
 #%end
 #%option
+#% key: search_iter
+#% type: integer
+#% description: Number of parameter settings that are sampled in the automatic parameter search (C, gamma).
+#% answer: 10
+#% required: no
+#%end
+#%option
 #% key: predictions
 #% type: string
 #% gisprompt: file, dsn
@@ -593,7 +600,7 @@ def learning(X_train, y_train, X_test, y_test, X_unlabeled, ID_unlabeled, steps,
 	if(X_unlabeled.size == 0) :
 		raise Exception("Pool of unlabeled samples empty")
 
-	c_svm, gamma_parameter = SVM_parameters(options['c_svm'], options['gamma_parameter'], X_train, y_train)
+	c_svm, gamma_parameter = SVM_parameters(options['c_svm'], options['gamma_parameter'], X_train, y_train, search_iter)
 	gcore.message('Parameters used : C={}, gamma={}, lambda={}'.format(c_svm, gamma_parameter, diversity_lambda))
 
 	classifier = train(X_train, y_train, c_svm, gamma_parameter)
@@ -605,7 +612,7 @@ def learning(X_train, y_train, X_test, y_test, X_unlabeled, ID_unlabeled, steps,
 
 	return ID_unlabeled[samples_to_label], score, predictions
 
-def SVM_parameters(c, gamma, X_train, y_train) :
+def SVM_parameters(c, gamma, X_train, y_train, n_iter) :
 	"""
 		Determine the parameters (C and gamma) for the SVM classifier.
 		If a parameter is specified in the parameters, keep this value.
@@ -627,15 +634,13 @@ def SVM_parameters(c, gamma, X_train, y_train) :
 	
 	if parameters != {} :
 		svr = svm.SVC()
-		clf = RandomizedSearchCV(svr, parameters, n_iter=100, n_jobs=-1, verbose=0)
+		clf = RandomizedSearchCV(svr, parameters, n_iter=n_iter, n_jobs=-1, verbose=0)
 		clf.fit(X_train, y_train)
 
 	if c == '' :
 		c = clf.best_params_['C']
 	if gamma == '' :
 		gamma = clf.best_params_['gamma']
-	print(c)
-	print(gamma)
 	return float(c), float(gamma)
 
 def main() :
@@ -646,11 +651,13 @@ def main() :
 	global test_start_with
 	global test_unlabeled_pool
 	global learning_iterations
+	global search_iter
 
 	# Some global variables (the user will be able to choose the value)
-	learning_steps = int(options['learning_steps']) if options['learning_steps'] != '' else 5					# Number of samples to label at each iteration
+	learning_steps = int(options['learning_steps']) if options['learning_steps'] != '0' else 5
+	search_iter = int(options['search_iter']) if options['search_iter'] != '0' else 10					# Number of samples to label at each iteration
 	diversity_lambda = float(options['diversity_lambda']) if options['diversity_lambda'] != '' else 0.25		# Lambda parameter used in the diversity heuristic
-	nbr_uncertainty = int(options['nbr_uncertainty']) if options['nbr_uncertainty'] != '' else 15 	# Number of samples to select (based on uncertainty criterion) before applying the diversity criterion. Must be at least greater or equal to [LEARNING][steps]
+	nbr_uncertainty = int(options['nbr_uncertainty']) if options['nbr_uncertainty'] != '0' else 15 	# Number of samples to select (based on uncertainty criterion) before applying the diversity criterion. Must be at least greater or equal to [LEARNING][steps]
 	predictions_file = options['predictions'] if options['predictions'] != '' else 'predictions.csv'
 	# Only for testing purposes
 	test_trials = 80			# Number of trials for computing the average scores
