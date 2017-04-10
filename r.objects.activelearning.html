@@ -8,60 +8,107 @@
 	</p>
 	<p>
 		The module enables learning with only a small initial labeled data set via <em>active learning</em>. This semi-supervised learning algorithm interactively query the user to label the regions that are most useful to improve the overall classification score.
-		With this technique, the number of examples to learn the classification is often much lower than the number of examples needed in normal supervised algorithms. You should start the classification with a small training set and run the module multiple times to label new informative samples to improve the overall classification score.
+		With this technique, the number of examples to learn the classification is often much lower than the number of examples needed in normal supervised algorithms. You should start the classification with a small training set and run the module multiple times to label new informative samples to improve the classification score.
 	</p>
 	<p>
-		The samples that are chosen to be labeled are the ones where the class prediction is the most uncertain.  Moreover, from the more uncertain samples, only the most different samples are kept. This diversity heuristic takes into account for each uncertain sample the distance to its closest neighbour and the average distance to all other samples. This ensures that newly labeled samples are not redundant whith each other.
+		The samples that are chosen to be labeled are the ones where the class prediction is the most uncertain [2].  Moreover, from the more uncertain samples, only the most different samples are kept [1]. This diversity heuristic takes into account for each uncertain sample the distance to its closest neighbour and the average distance to all other samples. This ensures that newly labeled samples are not redundant with each other.
 	</p>
 	<p>
 		The learning data should be composed of features extracted from the regions, for example with the 
 		<em><a href="i.segment.stats.html">i.segment.stats</a></em> 
-		module
+		module.
 
 		The features of the training set, the test set and the unlabeled set should be in three different files in csv format. The first line of each file must be a header containing the features' name. Every regions should be uniquely identified by the first attribute. The classes for the training and test examples should be the second attribute.
 	</p>
-	<p></p>
-	<h3>Parameters</h3>
+	Example of a training and test files :
+	<div class="code">
+		<pre>
+			cat,Class_num,attr1,attr2,attr3
+			167485,4,3.546,456.76,6.76 
+			183234,6,5.76,1285.54,9.45
+			173457,2,5.65,468.76,6.78
+		</pre>
+	</div>
+	Example of an unlabeled file :
+	<div class="code">
+		<pre>
+			cat,attr1,attr2,attr3
+			167485,3.546,456.76,6.76 
+			183234,5.76,1285.54,9.45
+			173457,5.65,468.76,6.78
+		</pre>
+	</div>
+	<p>
+		The training set can be easily updated once you have labeled new samples. Create a file to specify what label you give to which sample.
+		This file in csv format should have a header and two attributes per line : the ID of the sample you have labeled and the label itself.  The module will transfer the newly labeled samples from the unlabeled set to the training set, adding the class you have provided. This is done internaly and does not modify your original files.
+
+		If the user wants to save the changes in new files according to the updates, add the <strong>-u</strong> flag and new files will be created with the new labeled samples added to the training file and removed from the unlabeled file. You can specify the path of those output files in the parameters (training_updated, unlabeled_updated, update_updated) or leave the default paths.
+		If the transfer of a sample is successful, the corresponding line is deleted in the new update file.
+	</p>
+	Example of an update file :
+	<div class="code">
+		<pre>
+			cat,Class_num
+			194762,2
+			153659,6
+			178350,2
+		</pre>
+	</div>
+
+	Here are more details on a few parameters :
 	<ul>
-		<li><strong>training_set</strong> : Path to the training samples file</li>
-		<li><strong>test_set</strong> : Path to the test samples file</li>
-		Example for the training and test files :
-		<div class="code">
-			<pre>
-				cat,Class_num,attr1,attr2,attr3
-				167485,4,3.546,456.76,6.76 
-				183234,6,5.76,1285.54,9.45
-				173457,2,5.65,468.76,6.78
-			</pre>
-		</div>
-		<li><strong>unlabeled</strong> : Path to the unlabeled samples file</li>
-		Example for the unlabeled file :
-		<div class="code">
-			<pre>
-				cat,attr1,attr2,attr3
-				167485,3.546,456.76,6.76 
-				183234,5.76,1285.54,9.45
-				173457,5.65,468.76,6.78
-			</pre>
-		</div>
-		<li><strong>learning_steps</strong> (default: 5) : This is the number of samples that the module will ask to label at each run.</li>
-		<li><strong>nbr_uncertainty</strong> (default: 15) : Number of uncertain samples to choose before applying the diversity filter. This number should be lower than <em>learning_steps</em></li>
-		<li><strong>diversity_lambda</strong> (between 0 and 1, default: 0.25) : Parameter used in the diversity heuristic. If close to 0 only take into account the average distance to all other samples. If close to 1 only take into account the distance to the closest neighbour</li>
+		<li><strong>learning_steps</strong> : This is the number of samples that the module will ask to label at each run.</li>
+		<li><strong>nbr_uncertainty</strong> : Number of uncertain samples to choose before applying the diversity filter. This number should be lower than <em>learning_steps</em></li>
+		<li><strong>diversity_lambda</strong> : Parameter used in the diversity heuristic. If close to 0 only take into account the average distance to all other samples. If close to 1 only take into account the distance to the closest neighbour</li>
 		<li><strong>c_SVM</strong> : Penalty parameter C of the error term. If it is too large there is a risk of overfitting the training data. If it is too small you may have underfitting.</li>
 		<li><strong>gamma_SVM</strong> : Kernel coefficient. 1/#features is often a good value to start with.</li>
 		If C or gamma is left empty (or both), a good value based on the data distibution is found by cross-validation (at least 3 samples per class in the training set is needed, more is better). This automatic parameter tuning requires more computation time as the training set grows.
-		<li><strong>search_iter</strong> (default: 10) :Number of parameter settings that are sampled in the automatic parameter search (C, gamma). n_iter trades off runtime vs quality of the solution.</li>
-		<li><strong>update</strong> : Path to the update file. This file in csv format should have a header and two attributes per line : the ID of the sample you have labeled and the label itself.  If present, the module will transfer the newly labeled samples from the unlabeled set to the training set, adding the class you have provided.  If the transfer of a sample is successful, the corresponding line in the update file is deleted.</li>
-		Example of an update file :
-		<div class="code">
-			<pre>
-				cat,Class_num
-				194762,2
-				153659,6
-				178350,2
-			</pre>
-		</div>
+		<li><strong>search_iter</strong>  :Number of parameter settings that are sampled in the automatic parameter search (C, gamma). search_iter trades off runtime vs quality of the solution.</li>
 	</ul>
+</div>
+<div id="examples">
+	<h2>EXAMPLES</h2>
+	The following examples are based on the data files found in this module repository.
+
+	<h3>Simple run without an update file</h3>
+	<div class="code">
+		<pre>
+			r.objects.activelearning training_set=/path/to/training_set.csv test_set=/path/to/test_set.csv unlabeled_set=/path/to/unlabeled_set.csv
+
+			Parameters used : C=146.398423284, gamma=0.0645567086567, lambda=0.25
+			12527959
+			9892568
+			13731120
+			15445003
+			13767630
+			Class predictions written to predictions.csv
+			Training set : 70
+			Test set : 585
+			Unlabeled set : 792
+			Score : 0.321367521368
+		</pre>
+	</div>
+	<h3>With an update file</h3>
+	The five samples output at the previous example have been labeled and added to the update file.
+	<div class="code">
+		<pre>
+			r.objects.activelearning training_set=/path/to/training_set.csv test_set=/path/to/test_set.csv unlabeled_set=/path/to/unlabeled_set.csv update=/path/to/update.csv
+
+			Parameters used : C=101.580687073, gamma=0.00075388337475, lambda=0.25
+			Class predictions written to predictions.csv
+			Training set : 75
+			Test set : 585
+			Unlabeled set : 787
+			Score : 0.454700854701
+			8691475
+			9321017
+			14254774
+			14954255
+			15838185
+		</pre>
+	</div>
+
+	
 </div>
 <div id=notes>
 	<h2>NOTES</h2>
@@ -75,8 +122,8 @@
 
 <div id="references">
 	<h2>REFERENCES</h2>
-	<p>Bruzzone, L., & Persello, C. (2009). Active learning for classification of remote sensing images. 2009 IEEE International Geoscience and Remote Sensing Symposium. doi:10.1109/igarss.2009.5417857</p>
-	<p>Tuia, D., Volpi, M., Copa, L., Kanevski, M., & Munoz-Mari, J. (2011). A Survey of Active Learning Algorithms for Supervised Remote Sensing Image Classification. IEEE Journal of Selected Topics in Signal Processing, 5(3), 606-617. doi:10.1109/jstsp.2011.2139193</p>
+	<p>[1] Bruzzone, L., & Persello, C. (2009). Active learning for classification of remote sensing images. 2009 IEEE International Geoscience and Remote Sensing Symposium. doi:10.1109/igarss.2009.5417857</p>
+	<p>[2] Tuia, D., Volpi, M., Copa, L., Kanevski, M., & Munoz-Mari, J. (2011). A Survey of Active Learning Algorithms for Supervised Remote Sensing Image Classification. IEEE Journal of Selected Topics in Signal Processing, 5(3), 606-617. doi:10.1109/jstsp.2011.2139193</p>
 
 </div>
 

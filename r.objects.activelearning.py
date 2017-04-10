@@ -16,27 +16,22 @@
 #%module
 #% description: Remote image classification
 #%end
-#%option
+#%flag
+#% key: u
+#% description: Write to disk the updated training and unlabeled sets (new files)
+#%end
+#%option G_OPT_F_INPUT
 #% key: training_set
-#% type: string
-#% gisprompt: file, dsn
-#% answer:
 #% description: Training set (csv format)
 #% required: yes
 #%end
-#%option
+#%option G_OPT_F_INPUT
 #% key: test_set
-#% type: string
-#% gisprompt: file, dsn
-#% answer:
 #% description: Test set (csv format)
 #% required: yes
 #%end
-#%option
+#%option G_OPT_F_INPUT
 #% key: unlabeled_set
-#% type: string
-#% gisprompt: file, dsn
-#% answer:
 #% description: Unlabeled samples (csv format)
 #% required: yes
 #%end
@@ -80,26 +75,37 @@
 #% answer: 10
 #% required: no
 #%end
-#%option
+#%option G_OPT_F_INPUT
+#% key: update
+#% description: Training set update file
+#% required: no
+#%end
+#%option G_OPT_F_OUTPUT
 #% key: predictions
-#% type: string
-#% gisprompt: file, dsn
 #% description: Output file for class predictions
 #% answer: predictions.csv
 #% required: no
 #%end
-#%option
-#% key: update
-#% type: string
-#% gisprompt: file, dsn
-#% description: Update the training set
+#%option G_OPT_F_OUTPUT
+#% key: training_updated
+#% description: Output file for the updated training file
+#% answer: training_updated.csv
+#% required: no
+#%end
+#%option G_OPT_F_OUTPUT
+#% key: unlabeled_updated
+#% description: Output file for the updated unlabeled file
+#% answer: unlabeled_updated.csv
+#% required: no
+#%end
+#%option G_OPT_F_OUTPUT
+#% key: update_updated
+#% description: Output file for the updated update file
+#% answer: update_updated.csv
 #% required: no
 #%end
 
 
-import grass as grass
-import grass.script as gcore
-import sys
 
 try :
 	from sklearn import svm
@@ -111,12 +117,15 @@ try :
 except ImportError :
 	gcore.fatal("This module requires the scikit-learn python package. Please install it.")
 
+try : # You can run the tests outside of grass where those imports are not available
+	import grass as grass
+	import grass.script as gcore
+except ImportError :
+	pass
+
 import numpy as np 
-
 import scipy 
-
-
-import time
+import os.path
 import sys
 
 import matplotlib.pyplot as plt
@@ -124,23 +133,23 @@ import matplotlib.pyplot as plt
 
 def auto_learning(X, y, ID, steps, iterations, sample_selection) :
 	"""
-	Function for testing purposes only.  We already know the label of every sample (X, y).
-	Automaticaly get the labels from parameter y at each learning iteration.
-	
-	:param X: Features 
-	:param y: Labels 
-	:param ID: IDs of the samples
-	:param steps: Number of samples labeled at each iteration
-	:param_selection: Function that will be used to select the samples to label
-	
-	:type X: ndarray(#samples x #features)
-	:type y: ndarray(#samples)
-	:type ID: ndarray(#samples)
-	:type steps: int
-	:type sample_selection: callable
-	
-	:return: The final score
-	:rtype: float
+		Function for testing purposes only.  We already know the label of every sample (X, y).
+		Automaticaly get the labels from parameter y at each learning iteration.
+		
+		:param X: Features 
+		:param y: Labels 
+		:param ID: IDs of the samples
+		:param steps: Number of samples labeled at each iteration
+		:param_selection: Function that will be used to select the samples to label
+		
+		:type X: ndarray(#samples x #features)
+		:type y: ndarray(#samples)
+		:type ID: ndarray(#samples)
+		:type steps: int
+		:type sample_selection: callable
+		
+		:return: The final score
+		:rtype: float
 	"""
 
 	m = test_start_with	#number of initial training examples
@@ -169,7 +178,8 @@ def auto_learning(X, y, ID, steps, iterations, sample_selection) :
 		if(X_pool.size == 0) :
 			raise Exception("Pool of unlabeled samples empty")
 
-		classifier = train(X_train, y_train)
+		c_svm, gamma_parameter = SVM_parameters('160', '0.01', X_train, y_train, 15)
+		classifier = train(X_train, y_train, c_svm, gamma_parameter)
 		score = classifier.score(X_test, y_test)
 		
 		iterations_score[i] = score
@@ -193,34 +203,42 @@ def testing() :
 			- uncertainty + diversity
 	"""
 	
-	steps = learning_steps # Number of sample to label at each iteration
-	iterations = learning_iterations # Number of iteration in the active learning process
-	repeated = test_trials #number of runs for the average score
+	steps = 5 # Number of sample to label at each iteration
+	iterations = 50 # Number of iteration in the active learning process
+	repeated = 100 #number of runs for the average score
+	global diversity_lambda
+	global test_start_with
+	global test_unlabeled_pool
+	global nbr_uncertainty
+	nbr_uncertainty = 15
+	test_unlabeled_pool = 800
+	test_start_with = 60
+	diversity_lambda = 0.75
+
 	
+	# X_train, y_train, X_test, y_test, X_unlabeled, ID_unlabeled, steps, sample_selection	
 	score_active = np.empty([repeated, iterations])
 	score_active_diversity = np.empty([repeated, iterations])
 	score_random = np.empty([repeated, iterations])
-	
-	
-	
+	"""
 	for i in range(repeated) :
-		X, y, ID = load_data('training_sample.csv')
-		scores = learning(X, y, ID, steps, iterations, random_sample_selection)
-		print("Random learning ({})".format(i))
+		X, ID, y, header = load_data('original_samples.csv', labeled = True)
+		scores = auto_learning(X, y, ID, steps, iterations, random_sample_selection)
+		gcore.message("Random learning ({})".format(i))
 		score_random[i] = scores
-
+	"""
 	for i in range(repeated) :
-		X, y, ID = load_data('training_sample.csv')
-		scores = learning(X, y, ID, steps, iterations, active_diversity_sample_selection)
-		print("Acitve learning with diversity criterion ({})".format(i))
+		X, ID, y, header = load_data('original_samples.csv', labeled = True)
+		scores = auto_learning(X, y, ID, steps, iterations, active_diversity_sample_selection)
+		gcore.message("Active learning with diversity criterion ({})".format(i))
 		score_active_diversity[i] = scores
-	
+	"""
 	for i in range(repeated) :
-		X, y, ID = load_data('training_sample.csv')
-		scores = learning(X, y, ID, steps, iterations, active_sample_selection)
-		print("Active learning without diversity criterion ({})".format(i))
+		X, ID, y, header = load_data('original_samples.csv', labeled = True)
+		scores = auto_learning(X, y, ID, steps, iterations, active_sample_selection)
+		gcore.message("Active learning without diversity criterion ({})".format(i))
 		score_active[i] = scores
-
+	"""
 	
 
 	start = test_start_with
@@ -275,7 +293,7 @@ def load_data(file_path, labeled=False, skip_header=1, scale=True) :
 		:rtype: ndarray
 	"""
 	data = np.genfromtxt(file_path, delimiter=',', skip_header=0, dtype=None)
-	#np.random.shuffle(data)
+	
 
 	header = np.array([])
 
@@ -283,6 +301,7 @@ def load_data(file_path, labeled=False, skip_header=1, scale=True) :
 		header = data[0:skip_header,:]
 	data = data[skip_header:, :] #Remove header
 	data = data.astype(np.float)
+	np.random.shuffle(data)
 
 	ID = data[:,0] #get only row 0s
 	if labeled :
@@ -318,7 +337,31 @@ def write_result_file(ID, X_unlabeled, predictions, header, filename) :
 	np.savetxt(filename, data, delimiter=",",fmt="%s")
 	return True
 
-def update(update_file, training_file, unlabeled_file) :
+def update(update_file, X_train, ID_train, y_train, X_unlabeled, ID_unlabeled) :
+	update = np.genfromtxt(update_file, delimiter=',', skip_header=1)
+	if update.size == 0 :
+		return X_train, ID_train, y_train
+	elif update.ndim == 1 :
+		update = [update]
+	for index_update, row in enumerate(update) :
+		index = np.where(ID_unlabeled == row[0]) # Find in 'unlabeled' the line corresping to the ID
+		if index[0].size != 0 : # Check if row exists
+			features = X_unlabeled[index[0][0]] # Features
+			ID = ID_unlabeled[index[0][0]]
+			label = row[1]
+			#data = np.insert(data, 0, row[0], axis=0) # ID
+			#data = np.insert(data, 1, row[1], axis=0) # Class
+			X_train = np.append(X_train, [features], axis=0)
+			ID_train = np.append(ID_train, [ID], axis=0)
+			y_train = np.append(y_train, [label], axis=0)
+
+			# Don't delete from the unlabeled set to keep the original values 
+			# in the file and the scaled values in memory consistent
+				#X_unlabeled = np.delete(X_unlabeled, index[0][0], axis=0)
+				#ID_unlabeled = np.delete(ID_unlabeled, index[0][0], axis=0)
+	return X_train, ID_train, y_train
+
+def write_update(update_file, training_file, unlabeled_file) :
 	"""
 		Transfer samples from the unlabeled set to the training set based on an update file 
 		with IDs of samples to transfer and their classes.
@@ -359,9 +402,21 @@ def update(update_file, training_file, unlabeled_file) :
 	update = np.insert(update.astype(str), 0, header, axis=0)
 
 	# Save files
-	np.savetxt(update_file, update, delimiter=",",fmt="%s")
-	np.savetxt(training_file, training, delimiter=",",fmt="%s")
-	np.savetxt(unlabeled_file, unlabeled, delimiter=",",fmt="%s")
+	write_updated_file(options['update_updated'], update)
+	write_updated_file(options['training_updated'], training)
+	write_updated_file(options['unlabeled_updated'], unlabeled)
+
+def write_updated_file(file_path, data) :
+	"""
+		Write to disk some csv data. Add '_updated' at the end of the filename
+		:param filename: location where the file will be saved
+		:param data: data to save
+
+		:type file_path: string
+		:type data: ndarray
+	"""
+		
+	np.savetxt(file_path, data, delimiter=",",fmt="%s")
 
 def linear_scale(data) :
 	"""
@@ -390,7 +445,7 @@ def train(X, y, c_svm, gamma_parameter) :
 		:return: Returns the trained classifier
 		:rtype: sklearn.svm.SVC
 	"""
-	classifier = svm.SVC(kernel='rbf', C=c_svm, gamma=gamma_parameter, probability=True,decision_function_shape='ovo', random_state=1938475632)
+	classifier = svm.SVC(kernel='rbf', C=c_svm, gamma=gamma_parameter, probability=False,decision_function_shape='ovr', random_state=1938475632)
 	classifier.fit(X, y)
 
 	return classifier
@@ -470,7 +525,7 @@ def uncertainty_filter(samples, nbr, classifier) :
 		:rtype: ndarray
 	"""
 	NBR_NEW_SAMPLE = nbr
-	decision_function = classifier.predict_proba(samples)
+	decision_function = np.absolute(classifier.decision_function(samples))
 
 	# Check if the number of samples to return is not 
 	# bigger than the total number of samples
@@ -673,21 +728,28 @@ def main() :
 	learning_iterations = 50	# Number of iterations for the active learning process
 
 
-	if (options['update'] !='') :
-		update(options['update'], options['training_set'], options['unlabeled_set'])
 
 	X_train, ID_train, y_train, header_train = load_data(options['training_set'], labeled = True)
 	X_test, ID_test, y_test, header_test = load_data(options['test_set'], labeled = True)
 	X_unlabeled, ID_unlabeled, y_unlabeled, header_unlabeled = load_data(options['unlabeled_set'])
 	
+	nbr_train = ID_train.shape[0]
+
+	if (options['update'] !='') :
+		X_train, ID_train, y_train = update(options['update'], X_train, ID_train, y_train, X_unlabeled, ID_unlabeled)
+		if (flags['u']) :
+			write_update(options['update'], options['training_set'], options['unlabeled_set'])
+	
+	nbr_new_train = ID_train.shape[0]
+
 	samples_to_label_IDs, score, predictions = learning(X_train, y_train, X_test, y_test, X_unlabeled, ID_unlabeled, learning_steps, active_diversity_sample_selection)
 	
 	X_unlabeled, ID_unlabeled, y_unlabeled, header_unlabeled = load_data(options['unlabeled_set'], scale=False)
 	write_result_file(ID_unlabeled, X_unlabeled, predictions, header_unlabeled,  predictions_file)
-	gcore.message("Class predictions written to {}".format("predictions.csv"))
+	gcore.message("Class predictions written to {}".format(predictions_file))
 	gcore.message('Training set : {}'.format(X_train.shape[0]))
 	gcore.message('Test set : {}'.format(X_test.shape[0]))
-	gcore.message('Unlabeled set : {}'.format(X_unlabeled.shape[0]))
+	gcore.message('Unlabeled set : {}'.format(X_unlabeled.shape[0] - (nbr_new_train - nbr_train)))
 	gcore.message('Score : {}'.format(score))
 
 	for ID in samples_to_label_IDs :
@@ -696,4 +758,4 @@ def main() :
 
 if __name__ == '__main__' :
 	options, flags = grass.script.parser()
-	main()
+	testing()
