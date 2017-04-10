@@ -1,13 +1,33 @@
+#!/usr/bin/env python
+# encoding: utf-8
 import unittest
-from activelearning import *
+import os
+import numpy as np
+from sklearn.metrics.pairwise import rbf_kernel
+
+#from r.objects.activelearning import * --> doesn't work because of the dots in the file name
+import imp
+open_file, file_name, description = imp.find_module('r.objects.activelearning')
+al = imp.load_source('al', file_name, open_file)
+
+def silent_remove(filename) :
+	"""
+		Remove the file if it exists or do nothing if it does not exists
+	"""
+	try :
+		os.remove(filename)
+	except OSerror as e :
+		if e.errno != errno.ENOENT :
+			raise
 
 class Test (unittest.TestCase) :
+
 
 	def test_linear_scale(self) :
 
 		X = np.random.randint(0,100, (10,5))
 		#print(X)
-		X = linear_scale(X)
+		X = al.linear_scale(X)
 		#print(X)
 		p1 = np.percentile(X, 1, interpolation='nearest', axis=0)
 		p5 = np.percentile(X, 5, interpolation='nearest', axis=0)
@@ -21,7 +41,7 @@ class Test (unittest.TestCase) :
 
 		X = np.random.rand(100,100)/2
 		
-		X = linear_scale(X)
+		X = al.linear_scale(X)
 		p1 = np.percentile(X, 1, interpolation='nearest', axis=0)
 		p5 = np.percentile(X, 5, interpolation='nearest', axis=0)
 		p95 = np.percentile(X, 95, interpolation='nearest', axis=0)
@@ -41,7 +61,7 @@ class Test (unittest.TestCase) :
 		e = [-1, 	2]
 		samples = np.array([a, b, c, d, e])
 
-		dist = distance_to_closest(samples)
+		dist = al.distance_to_closest(samples)
 		self.assertEqual(dist[0], rbf_kernel([a], [b])[0][0]) # closest to a
 		self.assertEqual(dist[1], rbf_kernel([b], [a])[0][0]) # closest to b
 		self.assertEqual(dist[2], rbf_kernel([c], [b])[0][0]) # closest to c
@@ -55,7 +75,7 @@ class Test (unittest.TestCase) :
 		b = [0, 	4]
 		c = [2, 	5]
 		samples = np.array([a, b, c])
-		dist = average_distance(samples)
+		dist = al.average_distance(samples)
 
 		avg_a = (rbf_kernel([a], [b])[0][0] + rbf_kernel([a], [c])[0][0])/2
 		avg_b = (rbf_kernel([b], [a])[0][0] + rbf_kernel([b], [c])[0][0])/2
@@ -79,7 +99,7 @@ class Test (unittest.TestCase) :
 		i = [49, 	4] # This sample is not sent to the diversity filter
 		samples = np.array([a, b, b_bis, c, d, e, f, g, h, i])
 
-		selected_samples = diversity_filter(samples, np.arange(9), 4)
+		selected_samples = al.diversity_filter(samples, np.arange(9), 4)
 
 		self.assertTrue(0 not in selected_samples)
 		self.assertTrue((1 in selected_samples) ^ (2 in selected_samples))	# Either b or b_bis is kept
@@ -105,7 +125,7 @@ class Test (unittest.TestCase) :
 
 		#ID, X_unlabeled, predictions, header, filename
 
-		write_result_file(ID, X, predictions, header, filename)
+		al.write_result_file(ID, X, predictions, header, filename)
 
 		result = np.genfromtxt(filename, delimiter=',', dtype=str)
 
@@ -117,6 +137,52 @@ class Test (unittest.TestCase) :
 
 		self.assertTrue((data == result).all())
 
+		silent_remove(filename)
+
+	def test_update(self) :
+		#Create a fake update file
+		update_file = 'update.csv'
+		update_data = np.array([
+			['cat', 'Class'],
+			[123, 1],
+			[456, 2]
+		])
+
+		np.savetxt(update_file, update_data, delimiter=",",fmt="%s")
+		X_train = np.array([
+			[1,2,3],
+			[4,5,6]
+		])
+		ID_train = np.array([111,222])
+		y_train = np.array([1,2])
+
+		X_unlabeled = np.array([
+			[11,22,33],
+			[44,55,66],
+			[77,88,99]
+		])
+		ID_unlabeled = np.array([123,456, 789])
+
+		####
+		X_train, ID_train, y_train = al.update(update_file, X_train, ID_train, y_train, X_unlabeled, ID_unlabeled)
+		####
+		X_train_should_be = np.array([
+			[1,2,3],
+			[4,5,6],
+			[11,22,33],
+			[44,55,66]
+		])
+
+		ID_train_should_be = np.array([111,222,123,456])
+		y_train_should_be = np.array([1,2,1,2])
+
+		self.assertTrue((X_train == X_train_should_be).all())
+		self.assertTrue((ID_train_should_be == ID_train).all())
+		self.assertTrue((y_train_should_be == y_train).all())
+
+		silent_remove(update_file)
+
+	
 
 if __name__ == '__main__' :
 	unittest.main()
