@@ -72,7 +72,7 @@
 #% key: search_iter
 #% type: integer
 #% description: Number of parameter settings that are sampled in the automatic parameter search (C, gamma).
-#% answer: 10
+#% answer: 15
 #% required: no
 #%end
 #%option G_OPT_F_INPUT
@@ -83,25 +83,16 @@
 #%option G_OPT_F_OUTPUT
 #% key: predictions
 #% description: Output file for class predictions
-#% answer: predictions.csv
 #% required: no
 #%end
 #%option G_OPT_F_OUTPUT
 #% key: training_updated
 #% description: Output file for the updated training file
-#% answer: training_updated.csv
 #% required: no
 #%end
 #%option G_OPT_F_OUTPUT
 #% key: unlabeled_updated
 #% description: Output file for the updated unlabeled file
-#% answer: unlabeled_updated.csv
-#% required: no
-#%end
-#%option G_OPT_F_OUTPUT
-#% key: update_updated
-#% description: Output file for the updated update file
-#% answer: update_updated.csv
 #% required: no
 #%end
 
@@ -338,6 +329,16 @@ def write_result_file(ID, X_unlabeled, predictions, header, filename) :
 	return True
 
 def update(update_file, X_train, ID_train, y_train, X_unlabeled, ID_unlabeled) :
+	"""
+		Transfer features and labels from the unlabeled arrays to the training arrays based on the update file.
+
+		:param update_file: Path to the update file
+		:param X_train: Features for the training samples
+		:param ID_train: IDs of the training samples
+		:param y_train: Labels of the training samples 
+		:param X_unlabeled: Features for the training samples
+		:param ID_unlabeled: IDs of the unlabeled samples
+	"""
 	update = np.genfromtxt(update_file, delimiter=',', skip_header=1)
 	if update.size == 0 :
 		return X_train, ID_train, y_train
@@ -349,11 +350,11 @@ def update(update_file, X_train, ID_train, y_train, X_unlabeled, ID_unlabeled) :
 			features = X_unlabeled[index[0][0]] # Features
 			ID = ID_unlabeled[index[0][0]]
 			label = row[1]
-			#data = np.insert(data, 0, row[0], axis=0) # ID
-			#data = np.insert(data, 1, row[1], axis=0) # Class
 			X_train = np.append(X_train, [features], axis=0)
 			ID_train = np.append(ID_train, [ID], axis=0)
 			y_train = np.append(y_train, [label], axis=0)
+		else :
+			gcore.warning("The following sample could not be found :{}".format(row[0]))
 
 			# Don't delete from the unlabeled set to keep the original values 
 			# in the file and the scaled values in memory consistent
@@ -361,18 +362,22 @@ def update(update_file, X_train, ID_train, y_train, X_unlabeled, ID_unlabeled) :
 				#ID_unlabeled = np.delete(ID_unlabeled, index[0][0], axis=0)
 	return X_train, ID_train, y_train
 
-def write_update(update_file, training_file, unlabeled_file) :
+def write_update(update_file, training_file, unlabeled_file, new_training_filename, new_unlabeled_filename) :
 	"""
 		Transfer samples from the unlabeled set to the training set based on an update file 
 		with IDs of samples to transfer and their classes.
 
 		:param update_file: Path to the update file
-		:param training_file: Path the training file
-		:param unlabeled_file: Path the unlabeled file
+		:param training_file: Path to the training file
+		:param unlabeled_file: Path to the unlabeled file
+		:param new_training_filename: Path to the new training file that will be created
+		:param new_unlabeled_filename: Path to the new unlabeled file that will be created
 
 		:type update_file: string
 		:type training_file: string
 		:type unlabeled_file: string
+		:type new_training_filename: string
+		:type new_unlabeled_filename: string
 	"""
 	update = np.genfromtxt(update_file, delimiter=',', skip_header=1)
 	training = np.genfromtxt(training_file, delimiter=',', skip_header=0, dtype=None)
@@ -393,6 +398,8 @@ def write_update(update_file, training_file, unlabeled_file) :
 			training = np.append(training, [data], axis=0)
 			unlabeled = np.delete(unlabeled, index[0][0], axis=0)
 			successful_updates.append(index_update)
+		else :
+			gcore.warning("Unable to update : the following sample could not be found in the unlabeled set:{}".format(row[0]))
 
 	with open(update_file) as f:
    		header = f.readline()
@@ -402,9 +409,8 @@ def write_update(update_file, training_file, unlabeled_file) :
 	update = np.insert(update.astype(str), 0, header, axis=0)
 
 	# Save files
-	write_updated_file(options['update_updated'], update)
-	write_updated_file(options['training_updated'], training)
-	write_updated_file(options['unlabeled_updated'], unlabeled)
+	write_updated_file(new_training_filename, training)
+	write_updated_file(new_unlabeled_filename, unlabeled)
 
 def write_updated_file(file_path, data) :
 	"""
@@ -720,7 +726,7 @@ def main() :
 	search_iter = int(options['search_iter']) if options['search_iter'] != '0' else 10					# Number of samples to label at each iteration
 	diversity_lambda = float(options['diversity_lambda']) if options['diversity_lambda'] != '' else 0.25		# Lambda parameter used in the diversity heuristic
 	nbr_uncertainty = int(options['nbr_uncertainty']) if options['nbr_uncertainty'] != '0' else 15 	# Number of samples to select (based on uncertainty criterion) before applying the diversity criterion. Must be at least greater or equal to [LEARNING][steps]
-	predictions_file = options['predictions'] if options['predictions'] != '' else 'predictions.csv'
+	
 	# Only for testing purposes
 	test_trials = 80			# Number of trials for computing the average scores
 	test_start_with = 60		# Number of labeled samples to use for the first iteration
@@ -735,18 +741,26 @@ def main() :
 	
 	nbr_train = ID_train.shape[0]
 
-	if (options['update'] !='') :
+	if (options['update'] !='') : # If an update file has been specified, transfer samples
 		X_train, ID_train, y_train = update(options['update'], X_train, ID_train, y_train, X_unlabeled, ID_unlabeled)
-		if (flags['u']) :
-			write_update(options['update'], options['training_set'], options['unlabeled_set'])
+		if (flags['u']) : # Write update to disk
+			if (options['training_updated'] == '' or options['unlabeled_updated'] == '') :
+				gcore.error('Unable to write updates to disk : one of the output file path is missing. (training file: "{}" - unlabeled file: "{}")'.format(options['training_updated'], options['unlabeled_updated']))
+			else :
+				write_update(options['update'], options['training_set'], options['unlabeled_set'], options['training_updated'], options['unlabeled_updated'])
 	
 	nbr_new_train = ID_train.shape[0]
 
 	samples_to_label_IDs, score, predictions = learning(X_train, y_train, X_test, y_test, X_unlabeled, ID_unlabeled, learning_steps, active_diversity_sample_selection)
 	
 	X_unlabeled, ID_unlabeled, y_unlabeled, header_unlabeled = load_data(options['unlabeled_set'], scale=False)
-	write_result_file(ID_unlabeled, X_unlabeled, predictions, header_unlabeled,  predictions_file)
-	gcore.message("Class predictions written to {}".format(predictions_file))
+
+	predictions_file = options['predictions']
+	if (predictions_file != '') : # Write the class prediction only if an output file has been specified by the user
+		write_result_file(ID_unlabeled, X_unlabeled, predictions, header_unlabeled,  predictions_file)
+		gcore.message("Class predictions written to {}".format(predictions_file))
+
+
 	gcore.message('Training set : {}'.format(X_train.shape[0]))
 	gcore.message('Test set : {}'.format(X_test.shape[0]))
 	gcore.message('Unlabeled set : {}'.format(X_unlabeled.shape[0] - (nbr_new_train - nbr_train)))
@@ -758,4 +772,4 @@ def main() :
 
 if __name__ == '__main__' :
 	options, flags = grass.script.parser()
-	testing()
+	main()

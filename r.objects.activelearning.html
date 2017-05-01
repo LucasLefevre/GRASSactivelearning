@@ -9,6 +9,7 @@
 	<p>
 		The module enables learning with only a small initial labeled data set via <em>active learning</em>. This semi-supervised learning algorithm interactively query the user to label the regions that are most useful to improve the overall classification score.
 		With this technique, the number of examples to learn the classification is often much lower than the number of examples needed in normal supervised algorithms. You should start the classification with a small training set and run the module multiple times to label new informative samples to improve the classification score.
+		The score metric is the number of correctly predicted labels over the total number of samples in the test set.
 	</p>
 	<p>
 		The samples that are chosen to be labeled are the ones where the class prediction is the most uncertain [2].  Moreover, from the more uncertain samples, only the most different samples are kept [1]. This diversity heuristic takes into account for each uncertain sample the distance to its closest neighbour and the average distance to all other samples. This ensures that newly labeled samples are not redundant with each other.
@@ -40,10 +41,9 @@
 	</div>
 	<p>
 		The training set can be easily updated once you have labeled new samples. Create a file to specify what label you give to which sample.
-		This file in csv format should have a header and two attributes per line : the ID of the sample you have labeled and the label itself.  The module will transfer the newly labeled samples from the unlabeled set to the training set, adding the class you have provided. This is done internaly and does not modify your original files.
+		This file in csv format should have a header and two attributes per line : the ID of the sample you have labeled and the label itself.  The module will transfer the newly labeled samples from the unlabeled set to the training set, adding the class you have provided. This is done internally and does not modify your original files.
 
-		If the user wants to save the changes in new files according to the updates, add the <strong>-u</strong> flag and new files will be created with the new labeled samples added to the training file and removed from the unlabeled file. You can specify the path of those output files in the parameters (training_updated, unlabeled_updated, update_updated) or leave the default paths.
-		If the transfer of a sample is successful, the corresponding line is deleted in the new update file.
+		If the user wants to save the changes in new files according to the updates, add the <strong>-u</strong> flag and new files will be created with the new labeled samples added to the training file and removed from the unlabeled file. You can specify the path of those output files in the parameters (training_updated, unlabeled_updated).
 	</p>
 	Example of an update file :
 	<div class="code">
