@@ -157,7 +157,6 @@ def load_data(file_path, labeled=False, skip_header=1, scale=True) :
 
 	if scale :
 		X = preprocessing.scale(X)
-		#X = linear_scale(X)
 
 	return X, ID, y, header
 
@@ -209,10 +208,6 @@ def update(update_file, X_train, ID_train, y_train, X_unlabeled, ID_unlabeled) :
 		else :
 			gcore.warning("The following sample could not be found :{}".format(row[0]))
 
-			# Don't delete from the unlabeled set to keep the original values 
-			# in the file and the scaled values in memory consistent
-				#X_unlabeled = np.delete(X_unlabeled, index[0][0], axis=0)
-				#ID_unlabeled = np.delete(ID_unlabeled, index[0][0], axis=0)
 	return X_train, ID_train, y_train
 
 def write_update(update_file, training_file, unlabeled_file, new_training_filename, new_unlabeled_filename) :
@@ -312,41 +307,6 @@ def train(X, y, c_svm, gamma_parameter) :
 	classifier.fit(X, y)
 
 	return classifier
-
-def random_sample_selection(X_unlabled, nbr, classifier=None) :
-	"""
-		Randomly choose samples from X_unlabeld.
-
-		:param X_unlabeled: Pool of unlabeled samples
-		:param nbr: Number of samples to select from the pool
-		:param classifier: Not used in this function (default=None)
-
-		:type X_unlabeled: ndarray(#samples x #features)
-		:type nbr: int
-		:type classifier: sklearn.svm.SVC
-
-		:return: Indexes of chosen samples
-		:rtype: ndarray
-	"""
-	return np.random.choice(X_unlabled.shape[0], nbr)
-
-def active_sample_selection(X_unlabled, nbr, classifier) :
-	"""
-		Select a number of samples to label based only on uncertainety 
-		
-		:param X_unlabeled: Pool of unlabeled samples
-		:param nbr: Number of samples to select from the pool
-		:param classifier: Used to predict the class of each sample
-
-		:type X_unlabeled: ndarray(#samples x #features)
-		:type nbr: int
-		:type classifier: sklearn.svm.SVC
-
-		:return: Indexes of selected samples
-		:rtype: ndarray
-
-	"""
-	return uncertainty_filter(X_unlabled, nbr, classifier)
 
 def active_diversity_sample_selection(X_unlabled, nbr, classifier) :
 	"""
