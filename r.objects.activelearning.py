@@ -150,7 +150,6 @@ def load_data(file_path, labeled=False, skip_header=1, scale=True) :
 		header = data[0:skip_header,:]
 	data = data[skip_header:, :] #Remove header
 	data = data.astype(np.float)
-	np.random.shuffle(data)
 
 	ID = data[:,0] #get only row 0s
 	if labeled :
@@ -257,7 +256,7 @@ def write_update(update_file, training_file, unlabeled_file, new_training_filena
 			unlabeled = np.delete(unlabeled, index[0][0], axis=0)
 			successful_updates.append(index_update)
 		else :
-			gcore.warning("Unable to update : the following sample could not be found in the unlabeled set:{}".format(row[0]))
+			gcore.warning("Unable to update completely: the following sample could not be found in the unlabeled set:{}".format(row[0]))
 
 	with open(update_file) as f:
    		header = f.readline()
@@ -598,7 +597,7 @@ def main() :
 
 	samples_to_label_IDs, score, predictions = learning(X_train, y_train, X_test, y_test, X_unlabeled, ID_unlabeled, learning_steps, active_diversity_sample_selection)
 	
-	X_unlabeled, ID_unlabeled, y_unlabeled, header_unlabeled = load_data(options['unlabeled_set'], scale=False)
+	X_unlabeled, ID_unlabeled, y_unlabeled, header_unlabeled = load_data(options['unlabeled_set'], scale=False) # Load unscaled data
 
 	predictions_file = options['predictions']
 	if (predictions_file != '') : # Write the class prediction only if an output file has been specified by the user
