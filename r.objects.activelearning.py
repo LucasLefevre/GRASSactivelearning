@@ -122,148 +122,6 @@ import sys
 import matplotlib.pyplot as plt
 
 
-def auto_learning(X, y, ID, steps, iterations, sample_selection) :
-	"""
-		Function for testing purposes only.  We already know the label of every sample (X, y).
-		Automaticaly get the labels from parameter y at each learning iteration.
-		
-		:param X: Features 
-		:param y: Labels 
-		:param ID: IDs of the samples
-		:param steps: Number of samples labeled at each iteration
-		:param_selection: Function that will be used to select the samples to label
-		
-		:type X: ndarray(#samples x #features)
-		:type y: ndarray(#samples)
-		:type ID: ndarray(#samples)
-		:type steps: int
-		:type sample_selection: callable
-		
-		:return: The final score
-		:rtype: float
-	"""
-
-	m = test_start_with	#number of initial training examples
-	p = test_unlabeled_pool	#pool of unlabeled samples
-
-
-	# Training set
-	X_train = X[:m,:]
-	y_train = y[:m]
-	ID_train = ID[:m]
-
-	# Pool of unlabeled data
-	X_pool = X[m:p,:]
-	y_pool = y[m:p]
-	ID_pool = ID[m:p]
-
-	# Test set
-	X_test = X[p:,:]
-	y_test = y[p:]
-	ID_test = ID[p:]
-
-	iterations_score = np.empty(iterations)
-
-	for i in range(0, iterations) :
-
-		if(X_pool.size == 0) :
-			raise Exception("Pool of unlabeled samples empty")
-
-		c_svm, gamma_parameter = SVM_parameters('160', '0.01', X_train, y_train, 15)
-		classifier = train(X_train, y_train, c_svm, gamma_parameter)
-		score = classifier.score(X_test, y_test)
-		
-		iterations_score[i] = score
-		samples_to_label = sample_selection(X_pool, steps, classifier)
-		
-		# Add new labeled samples to the training set
-		X_train = np.concatenate((X_train,  X_pool[samples_to_label]), axis=0)
-		y_train = np.concatenate((y_train,  y_pool[samples_to_label]), axis=0)
-
-		# Delete new labeled samples from the pool
-		X_pool = np.delete(X_pool, samples_to_label, axis=0)
-		y_pool = np.delete(y_pool, samples_to_label, axis=0)
-
-	return iterations_score
-
-def testing() :
-	"""
-		Test the different heuristics.  Tested heurostics are
-			- random selection
-			- uncertainty
-			- uncertainty + diversity
-	"""
-	
-	steps = 5 # Number of sample to label at each iteration
-	iterations = 50 # Number of iteration in the active learning process
-	repeated = 100 #number of runs for the average score
-	global diversity_lambda
-	global test_start_with
-	global test_unlabeled_pool
-	global nbr_uncertainty
-	nbr_uncertainty = 15
-	test_unlabeled_pool = 800
-	test_start_with = 60
-	diversity_lambda = 0.75
-
-	
-	# X_train, y_train, X_test, y_test, X_unlabeled, ID_unlabeled, steps, sample_selection	
-	score_active = np.empty([repeated, iterations])
-	score_active_diversity = np.empty([repeated, iterations])
-	score_random = np.empty([repeated, iterations])
-	"""
-	for i in range(repeated) :
-		X, ID, y, header = load_data('original_samples.csv', labeled = True)
-		scores = auto_learning(X, y, ID, steps, iterations, random_sample_selection)
-		gcore.message("Random learning ({})".format(i))
-		score_random[i] = scores
-	"""
-	for i in range(repeated) :
-		X, ID, y, header = load_data('original_samples.csv', labeled = True)
-		scores = auto_learning(X, y, ID, steps, iterations, active_diversity_sample_selection)
-		gcore.message("Active learning with diversity criterion ({})".format(i))
-		score_active_diversity[i] = scores
-	"""
-	for i in range(repeated) :
-		X, ID, y, header = load_data('original_samples.csv', labeled = True)
-		scores = auto_learning(X, y, ID, steps, iterations, active_sample_selection)
-		gcore.message("Active learning without diversity criterion ({})".format(i))
-		score_active[i] = scores
-	"""
-	
-
-	start = test_start_with
-
-	draw_graph(score_active, score_active_diversity, score_random, np.arange(start, start+iterations*steps, steps))
-
-
-def draw_graph(score_active, score_active_diversity, score_random, examples) :
-	"""
-		Draw a graph with the score for the 3 heuristics tested (random, uncertainty only, uncertainty + diversity)
-	"""
-	mu1 = score_active.mean(axis=0)
-	sigma1 = score_active.std(axis=0)
-
-	mu2 = score_active_diversity.mean(axis=0)
-
-	mu3 = score_random.mean(axis=0)
-	sigma3 = score_random.std(axis=0)
-
-	fig, ax = plt.subplots(1)
-	
-	
-	ax.plot(examples, mu1, lw=2, label='Active learning without diversity criterion', color='blue')
-	#ax.fill_between(examples, mu1+sigma1, mu1-sigma1, facecolor='blue', alpha=0.5)
-	ax.plot(examples, mu2, lw=2, label='Active learning with diversity criterion', color='green')
-	ax.plot(examples, mu3, lw=2, label='Random learning', color='yellow')
-	#ax.fill_between(examples, mu2+sigma2, mu2-sigma2, facecolor='yellow', alpha=0.5)
-	ax.legend(loc='upper left')
-	ax.set_ylabel('Score')
-	ax.set_xlabel('Number of training examples')
-
-	ax.grid(25)
-	plt.show()
-
 
 def load_data(file_path, labeled=False, skip_header=1, scale=True) :
 
@@ -715,26 +573,13 @@ def main() :
 	global learning_steps
 	global diversity_lambda
 	global nbr_uncertainty
-	global test_trials
-	global test_start_with
-	global test_unlabeled_pool
-	global learning_iterations
 	global search_iter
 
-	# Some global variables (the user will be able to choose the value)
 	learning_steps = int(options['learning_steps']) if options['learning_steps'] != '0' else 5
 	search_iter = int(options['search_iter']) if options['search_iter'] != '0' else 10					# Number of samples to label at each iteration
 	diversity_lambda = float(options['diversity_lambda']) if options['diversity_lambda'] != '' else 0.25		# Lambda parameter used in the diversity heuristic
 	nbr_uncertainty = int(options['nbr_uncertainty']) if options['nbr_uncertainty'] != '0' else 15 	# Number of samples to select (based on uncertainty criterion) before applying the diversity criterion. Must be at least greater or equal to [LEARNING][steps]
 	
-	# Only for testing purposes
-	test_trials = 80			# Number of trials for computing the average scores
-	test_start_with = 60		# Number of labeled samples to use for the first iteration
-	test_unlabeled_pool = 800	# Number of unlabeled samples
-	learning_iterations = 50	# Number of iterations for the active learning process
-
-
-
 	X_train, ID_train, y_train, header_train = load_data(options['training_set'], labeled = True)
 	X_test, ID_test, y_test, header_test = load_data(options['test_set'], labeled = True)
 	X_unlabeled, ID_unlabeled, y_unlabeled, header_unlabeled = load_data(options['unlabeled_set'])
