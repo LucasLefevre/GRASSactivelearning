@@ -589,7 +589,8 @@ def main() :
 		X_train, ID_train, y_train = update(options['update'], X_train, ID_train, y_train, X_unlabeled, ID_unlabeled)
 		if (options['training_updated'] != '' or options['unlabeled_updated'] != '') :
 			write_update(options['update'], options['training_set'], options['unlabeled_set'], options['training_updated'], options['unlabeled_updated'])
-	
+	elif (options['update'] =='' and (options['training_updated'] != '' or options['unlabeled_updated'] != '')) :
+		gcore.warning('No update file specified : could not write the updated files.')
 	nbr_new_train = ID_train.shape[0]
 
 	samples_to_label_IDs, score, predictions = learning(X_train, y_train, X_test, y_test, X_unlabeled, ID_unlabeled, learning_steps, active_diversity_sample_selection)
