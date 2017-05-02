@@ -16,10 +16,6 @@
 #%module
 #% description: Remote image classification
 #%end
-#%flag
-#% key: u
-#% description: Write to disk the updated training and unlabeled sets (new files)
-#%end
 #%option G_OPT_F_INPUT
 #% key: training_set
 #% description: Training set (csv format)
@@ -266,8 +262,12 @@ def write_update(update_file, training_file, unlabeled_file, new_training_filena
 	update = np.insert(update.astype(str), 0, header, axis=0)
 
 	# Save files
-	write_updated_file(new_training_filename, training)
-	write_updated_file(new_unlabeled_filename, unlabeled)
+	if new_training_filename != '' :
+		write_updated_file(new_training_filename, training)
+		gcore.message("New training file written to {}".format(new_training_filename))
+	if new_unlabeled_filename != '':
+		write_updated_file(new_unlabeled_filename, unlabeled)
+		gcore.message("New unlabeled file written to {}".format(new_unlabeled_filename))
 
 def write_updated_file(file_path, data) :
 	"""
@@ -587,11 +587,8 @@ def main() :
 
 	if (options['update'] !='') : # If an update file has been specified, transfer samples
 		X_train, ID_train, y_train = update(options['update'], X_train, ID_train, y_train, X_unlabeled, ID_unlabeled)
-		if (flags['u']) : # Write update to disk
-			if (options['training_updated'] == '' or options['unlabeled_updated'] == '') :
-				gcore.error('Unable to write updates to disk : one of the output file path is missing. (training file: "{}" - unlabeled file: "{}")'.format(options['training_updated'], options['unlabeled_updated']))
-			else :
-				write_update(options['update'], options['training_set'], options['unlabeled_set'], options['training_updated'], options['unlabeled_updated'])
+		if (options['training_updated'] != '' or options['unlabeled_updated'] != '') :
+			write_update(options['update'], options['training_set'], options['unlabeled_set'], options['training_updated'], options['unlabeled_updated'])
 	
 	nbr_new_train = ID_train.shape[0]
 

@@ -43,7 +43,7 @@
 		The training set can be easily updated once you have labeled new samples. Create a file to specify what label you give to which sample.
 		This file in csv format should have a header and two attributes per line : the ID of the sample you have labeled and the label itself.  The module will transfer the newly labeled samples from the unlabeled set to the training set, adding the class you have provided. This is done internally and does not modify your original files.
 
-		If the user wants to save the changes in new files according to the updates, add the <strong>-u</strong> flag and new files will be created with the new labeled samples added to the training file and removed from the unlabeled file. You can specify the path of those output files in the parameters (training_updated, unlabeled_updated).
+		If the user wants to save the changes in new files according to the updates, new files can be created with the new labeled samples added to the training file and removed from the unlabeled file. Just specify the path of those output files in the parameters (training_updated, unlabeled_updated).
 	</p>
 	Example of an update file :
 	<div class="code">
